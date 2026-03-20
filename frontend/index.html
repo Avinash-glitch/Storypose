@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StoryPose ✨</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Fredoka+One&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- MediaPipe Pose via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <!-- ===== HEADER ===== -->
+  <header class="app-header">
+    <div class="header-left">
+      <h1 class="app-title">📖 StoryPose</h1>
+      <p class="app-subtitle">Strike a pose, tell your tale!</p>
+    </div>
+    <div class="header-right">
+      <div id="status-pill" class="status-pill idle">
+        <span class="status-dot"></span>
+        <span id="status-text">Ready</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== MAIN LAYOUT ===== -->
+  <main class="app-main">
+
+    <!-- LEFT COLUMN: Camera + Pose -->
+    <aside class="camera-panel">
+      <div class="camera-wrapper">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="pose-canvas"></canvas>
+        <div id="pose-label" class="pose-label">Initialising pose...</div>
+      </div>
+
+      <!-- Controls -->
+      <div class="controls">
+        <button id="btn-start" class="btn btn-primary" disabled>
+          🎙️ Start Story
+        </button>
+        <button id="btn-end" class="btn btn-secondary" disabled>
+          📚 End Story
+        </button>
+        <button id="btn-download" class="btn btn-accent" disabled style="display:none">
+          ⬇️ Download
+        </button>
+        <button id="btn-restart" class="btn btn-primary" style="display:none">
+          🔄 New Story
+        </button>
+      </div>
+
+      <!-- Mic visualiser -->
+      <div id="mic-bar-wrapper" class="mic-bar-wrapper" style="display:none">
+        <div id="mic-bar" class="mic-bar"></div>
+      </div>
+
+      <!-- Live transcript -->
+      <div id="live-transcript" class="live-transcript" style="display:none"></div>
+
+      <!-- Current page info -->
+      <div class="page-info">
+        <span>Page: </span><span id="page-count">0</span>
+      </div>
+    </aside>
+
+    <!-- RIGHT COLUMN: Storybook -->
+    <section class="storybook-panel">
+      <!-- Welcome screen (shown before story starts) -->
+      <div id="welcome-screen" class="welcome-screen">
+        <div class="welcome-card">
+          <div class="welcome-icon">🌟</div>
+          <h2>Welcome, Storyteller!</h2>
+          <p>
+            Stand in front of the camera, press <strong>Start Story</strong>,
+            and narrate your adventure. Strike a pose to make your illustrations
+            come alive!
+          </p>
+          <ul class="tips">
+            <li>🙋 Raise your arms to show excitement</li>
+            <li>🦸 Spread your arms wide to show power</li>
+            <li>🤸 Crouch down to show sneaking</li>
+            <li>Say <em>"The End"</em> when your story is finished</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Pages are rendered here -->
+      <div id="storybook-container" class="storybook-container" style="display:none"></div>
+
+      <!-- Generating overlay -->
+      <div id="generating-overlay" class="generating-overlay" style="display:none">
+        <div class="generating-card">
+          <div class="spinner"></div>
+          <p id="generating-text">Drawing your illustration...</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== AI SPEECH BUBBLE ===== -->
+  <div id="ai-bubble" class="ai-bubble" style="display:none">
+    <div class="ai-bubble-inner">
+      <span class="ai-avatar">🤖</span>
+      <p id="ai-bubble-text"></p>
+    </div>
+  </div>
+
+  <!-- ===== JS MODULES ===== -->
+  <script src="/js/tts.js"></script>
+  <script src="/js/pose.js"></script>
+  <script src="/js/voice.js"></script>
+  <script src="/js/storybook.js"></script>
+  <script src="/js/app.js"></script>
+
+</body>
+</html>

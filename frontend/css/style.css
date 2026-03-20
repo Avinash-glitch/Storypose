@@ -1,0 +1,550 @@
+/* ============================================================
+   StoryPose — Main Stylesheet
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --paper:        #fdf6e3;
+  --paper-dark:   #f0e6c8;
+  --ink:          #3d2b1f;
+  --spine:        #8B7355;
+  --accent:       #e07b39;
+  --accent-dark:  #c0612a;
+  --green:        #4caf50;
+  --yellow:       #ffc107;
+  --purple:       #9c27b0;
+  --red:          #f44336;
+  --shadow:       rgba(0,0,0,0.25);
+  --radius:       12px;
+  --font-story:   'Patrick Hand', 'Comic Sans MS', cursive;
+  --font-ui:      'Fredoka One', 'Comic Sans MS', cursive;
+}
+
+body {
+  font-family: var(--font-ui);
+  background: linear-gradient(135deg, #1a0a00 0%, #3b1f0a 50%, #1a0a00 100%);
+  min-height: 100vh;
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(8px);
+  border-bottom: 2px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+}
+
+.app-title {
+  font-size: 1.8rem;
+  color: #ffd700;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+  letter-spacing: 1px;
+}
+
+.app-subtitle {
+  font-family: var(--font-story);
+  color: rgba(255,255,255,0.6);
+  font-size: 0.85rem;
+  margin-top: 2px;
+}
+
+/* ============================================================
+   STATUS PILL
+   ============================================================ */
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-family: var(--font-ui);
+  color: white;
+  transition: background 0.3s;
+}
+
+.status-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1.5s infinite;
+}
+
+.status-pill.idle       { background: rgba(255,255,255,0.15); }
+.status-pill.idle .status-dot { background: #aaa; animation: none; }
+.status-pill.listening  { background: rgba(76,175,80,0.3); border: 1px solid var(--green); }
+.status-pill.listening .status-dot { background: var(--green); }
+.status-pill.clarifying { background: rgba(255,193,7,0.3); border: 1px solid var(--yellow); }
+.status-pill.clarifying .status-dot { background: var(--yellow); }
+.status-pill.generating { background: rgba(156,39,176,0.3); border: 1px solid var(--purple); }
+.status-pill.generating .status-dot { background: var(--purple); }
+.status-pill.speaking   { background: rgba(33,150,243,0.3); border: 1px solid #2196f3; }
+.status-pill.speaking .status-dot { background: #2196f3; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(1.3); }
+}
+
+/* ============================================================
+   MAIN LAYOUT
+   ============================================================ */
+
+.app-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  height: calc(100vh - 62px);
+}
+
+/* ============================================================
+   LEFT: CAMERA PANEL
+   ============================================================ */
+
+.camera-panel {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: rgba(0,0,0,0.3);
+  border-right: 1px solid rgba(255,255,255,0.08);
+  overflow-y: auto;
+}
+
+.camera-wrapper {
+  position: relative;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #000;
+  aspect-ratio: 4/3;
+  border: 2px solid rgba(255,215,0,0.3);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+.camera-wrapper video,
+.camera-wrapper canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#pose-canvas { z-index: 2; }
+
+.pose-label {
+  position: absolute;
+  bottom: 6px;
+  left: 0; right: 0;
+  text-align: center;
+  font-family: var(--font-story);
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.85);
+  background: rgba(0,0,0,0.55);
+  padding: 3px 8px;
+  border-radius: 0 0 var(--radius) var(--radius);
+  z-index: 3;
+}
+
+/* ============================================================
+   CONTROLS
+   ============================================================ */
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn {
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 10px;
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.2s, opacity 0.2s;
+  letter-spacing: 0.5px;
+}
+
+.btn:active  { transform: scale(0.97); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: linear-gradient(135deg, #4caf50, #388e3c);
+  color: white;
+  box-shadow: 0 4px 12px rgba(76,175,80,0.4);
+}
+.btn-primary:hover:not(:disabled) { box-shadow: 0 6px 16px rgba(76,175,80,0.6); }
+
+.btn-secondary {
+  background: linear-gradient(135deg, #ff9800, #e65100);
+  color: white;
+  box-shadow: 0 4px 12px rgba(255,152,0,0.4);
+}
+.btn-secondary:hover:not(:disabled) { box-shadow: 0 6px 16px rgba(255,152,0,0.6); }
+
+.btn-accent {
+  background: linear-gradient(135deg, #9c27b0, #6a1b9a);
+  color: white;
+  box-shadow: 0 4px 12px rgba(156,39,176,0.4);
+}
+.btn-accent:hover:not(:disabled) { box-shadow: 0 6px 16px rgba(156,39,176,0.6); }
+
+/* ============================================================
+   MIC VISUALISER
+   ============================================================ */
+
+.mic-bar-wrapper {
+  height: 8px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.mic-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--green), #8bc34a);
+  border-radius: 4px;
+  transition: width 0.05s linear;
+}
+
+.live-transcript {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.85);
+  min-height: 36px;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.page-info {
+  text-align: center;
+  font-family: var(--font-story);
+  color: rgba(255,255,255,0.5);
+  font-size: 0.8rem;
+}
+
+/* ============================================================
+   RIGHT: STORYBOOK PANEL
+   ============================================================ */
+
+.storybook-panel {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============================================================
+   WELCOME SCREEN
+   ============================================================ */
+
+.welcome-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.welcome-card {
+  background: var(--paper);
+  border-radius: 16px;
+  padding: 40px 48px;
+  max-width: 500px;
+  text-align: center;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  border: 3px solid var(--spine);
+}
+
+.welcome-icon { font-size: 3rem; margin-bottom: 12px; }
+
+.welcome-card h2 {
+  font-family: var(--font-ui);
+  font-size: 1.8rem;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+
+.welcome-card p {
+  font-family: var(--font-story);
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--ink);
+  margin-bottom: 20px;
+}
+
+.tips {
+  list-style: none;
+  text-align: left;
+  display: inline-block;
+}
+
+.tips li {
+  font-family: var(--font-story);
+  font-size: 0.95rem;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+
+/* ============================================================
+   STORYBOOK CONTAINER (pages scroll here)
+   ============================================================ */
+
+.storybook-container {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  align-items: center;
+  scroll-behavior: smooth;
+}
+
+/* ============================================================
+   STORYBOOK PAGE
+   ============================================================ */
+
+.storybook-page {
+  display: flex;
+  width: 100%;
+  max-width: 900px;
+  min-height: 420px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  border-radius: 6px;
+  flex-shrink: 0;
+  transform-origin: center left;
+}
+
+.page {
+  flex: 1;
+  background: var(--paper);
+  padding: 32px;
+  position: relative;
+}
+
+.page-left {
+  border-radius: 6px 0 0 6px;
+  border-right: 3px solid var(--spine);
+  background: linear-gradient(to right, var(--paper-dark), var(--paper));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-right {
+  border-radius: 0 6px 6px 0;
+  background: linear-gradient(to left, var(--paper-dark), var(--paper));
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.story-illustration {
+  width: 100%;
+  height: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+}
+
+.story-illustration-placeholder {
+  width: 100%;
+  height: 280px;
+  background: linear-gradient(135deg, #f0e6c8, #e8d5b0);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  border: 2px dashed var(--spine);
+}
+
+.story-text {
+  font-family: var(--font-story);
+  font-size: 1.2rem;
+  line-height: 1.9;
+  color: var(--ink);
+  margin-bottom: 16px;
+}
+
+.pose-tag {
+  font-family: var(--font-story);
+  font-size: 0.75rem;
+  color: rgba(61,43,31,0.45);
+  font-style: italic;
+}
+
+.page-number {
+  position: absolute;
+  bottom: 12px;
+  font-family: var(--font-story);
+  font-size: 0.8rem;
+  color: rgba(61,43,31,0.4);
+}
+
+.page-number-left  { left:  20px; }
+.page-number-right { right: 20px; }
+
+/* ============================================================
+   COVER PAGE
+   ============================================================ */
+
+.storybook-cover {
+  width: 100%;
+  max-width: 900px;
+  min-height: 420px;
+  background: linear-gradient(135deg, #8B7355, #5c4a2a);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+  border: 6px solid #c9a96e;
+  flex-shrink: 0;
+  padding: 40px;
+  text-align: center;
+}
+
+.cover-title {
+  font-family: var(--font-ui);
+  font-size: 2.4rem;
+  color: #ffd700;
+  text-shadow: 0 3px 10px rgba(0,0,0,0.5);
+}
+
+.cover-subtitle {
+  font-family: var(--font-story);
+  font-size: 1rem;
+  color: rgba(255,215,0,0.7);
+}
+
+/* ============================================================
+   PAGE TURN ANIMATION
+   ============================================================ */
+
+@keyframes pageTurn {
+  0%   { transform: perspective(1200px) rotateY(0deg); opacity: 1; }
+  50%  { transform: perspective(1200px) rotateY(-20deg); opacity: 0.8; }
+  100% { transform: perspective(1200px) rotateY(0deg); opacity: 1; }
+}
+
+.page-turn-anim { animation: pageTurn 0.7s ease-in-out; }
+
+/* ============================================================
+   GENERATING OVERLAY
+   ============================================================ */
+
+.generating-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  backdrop-filter: blur(4px);
+}
+
+.generating-card {
+  background: var(--paper);
+  border-radius: 16px;
+  padding: 36px 48px;
+  text-align: center;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+}
+
+.generating-card p {
+  font-family: var(--font-ui);
+  font-size: 1.1rem;
+  color: var(--ink);
+  margin-top: 16px;
+}
+
+.spinner {
+  width: 50px; height: 50px;
+  border: 5px solid var(--paper-dark);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   AI SPEECH BUBBLE
+   ============================================================ */
+
+.ai-bubble {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  max-width: 600px;
+  width: 90%;
+  animation: bubbleIn 0.3s ease-out;
+}
+
+@keyframes bubbleIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.ai-bubble-inner {
+  background: #fff8e1;
+  border: 2px solid #ffc107;
+  border-radius: 20px;
+  padding: 14px 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+}
+
+.ai-avatar { font-size: 1.6rem; flex-shrink: 0; }
+
+.ai-bubble-inner p {
+  font-family: var(--font-story);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: #3d2b1f;
+  margin: 0;
+}
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }

@@ -1,0 +1,19 @@
+# Python
+.venv310/
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment / secrets
+.env
+
+# ML models (too large for GitHub)
+*.safetensors
+*.ckpt
+*.pt
+*.bin
+models/
+
+# OS
+.DS_Store
+Thumbs.db
