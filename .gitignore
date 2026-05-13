@@ -1,11 +1,15 @@
 # Python
+.venv/
 .venv310/
+.venv_mac/
 __pycache__/
 *.pyc
 *.pyo
 
 # Environment / secrets
 .env
+.env.*
+!.env.example
 
 # ML models (too large for GitHub)
 *.safetensors
@@ -16,4 +20,8 @@ models/
 
 # OS
 .DS_Store
+._*
+
+# Local assistant/tool config
+.claude/
 Thumbs.db

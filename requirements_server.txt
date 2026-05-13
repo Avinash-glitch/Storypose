@@ -1,4 +1,8 @@
+anthropic
 fastapi
+openai-whisper
+python-dotenv
+requests
 uvicorn[standard]
 python-multipart
 httpx
