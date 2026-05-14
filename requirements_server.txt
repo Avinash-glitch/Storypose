@@ -1,5 +1,7 @@
 anthropic
+fal-client
 fastapi
+fpdf2
 openai-whisper
 python-dotenv
 requests

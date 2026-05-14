@@ -1,0 +1,191 @@
+{
+  "id": "storypose-api-singlepage",
+  "revision": 0,
+  "last_node_id": 10,
+  "last_link_id": 10,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "UnetLoaderGGUF",
+      "pos": [760, 190],
+      "size": [270, 106.65625],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {"localized_name": "unet_name", "name": "unet_name", "type": "COMBO", "widget": {"name": "unet_name"}, "link": null}
+      ],
+      "outputs": [
+        {"localized_name": "MODEL", "name": "MODEL", "type": "MODEL", "links": [1]}
+      ],
+      "properties": {"Node name for S&R": "UnetLoaderGGUF"},
+      "widgets_values": ["flux1-dev-Q5_K_S.gguf"]
+    },
+    {
+      "id": 3,
+      "type": "DualCLIPLoaderGGUF",
+      "pos": [370, 480],
+      "size": [270, 175.984375],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {"localized_name": "clip_name1", "name": "clip_name1", "type": "COMBO", "widget": {"name": "clip_name1"}, "link": null},
+        {"localized_name": "clip_name2", "name": "clip_name2", "type": "COMBO", "widget": {"name": "clip_name2"}, "link": null},
+        {"localized_name": "type", "name": "type", "type": "COMBO", "widget": {"name": "type"}, "link": null}
+      ],
+      "outputs": [
+        {"localized_name": "CLIP", "name": "CLIP", "type": "CLIP", "links": [2, 6]}
+      ],
+      "properties": {"Node name for S&R": "DualCLIPLoaderGGUF"},
+      "widgets_values": ["clip_l.safetensors", "t5-v1_1-xxl-encoder-Q5_K_M.gguf", "flux"]
+    },
+    {
+      "id": 4,
+      "type": "VAELoader",
+      "pos": [380, 140],
+      "size": [270, 82.65625],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {"localized_name": "vae_name", "name": "vae_name", "type": "COMBO", "widget": {"name": "vae_name"}, "link": null}
+      ],
+      "outputs": [
+        {"localized_name": "VAE", "name": "VAE", "type": "VAE", "links": [7]}
+      ],
+      "properties": {"Node name for S&R": "VAELoader"},
+      "widgets_values": ["ae.safetensors"]
+    },
+    {
+      "id": 5,
+      "type": "CLIPTextEncode",
+      "pos": [480, 750],
+      "size": [400, 200],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {"localized_name": "clip", "name": "clip", "type": "CLIP", "link": 2},
+        {"localized_name": "text", "name": "text", "type": "STRING", "widget": {"name": "text"}, "link": null}
+      ],
+      "outputs": [
+        {"localized_name": "CONDITIONING", "name": "CONDITIONING", "type": "CONDITIONING", "links": [3]}
+      ],
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": ["Children's storybook illustration of a brave little girl on a roof waving at clouds, soft watercolor, no text"]
+    },
+    {
+      "id": 6,
+      "type": "EmptyFlux2LatentImage",
+      "pos": [420, 280],
+      "size": [270, 144],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {"localized_name": "width", "name": "width", "type": "INT", "widget": {"name": "width"}, "link": null},
+        {"localized_name": "height", "name": "height", "type": "INT", "widget": {"name": "height"}, "link": null},
+        {"localized_name": "batch_size", "name": "batch_size", "type": "INT", "widget": {"name": "batch_size"}, "link": null}
+      ],
+      "outputs": [
+        {"localized_name": "LATENT", "name": "LATENT", "type": "LATENT", "links": [4]}
+      ],
+      "properties": {"Node name for S&R": "EmptyFlux2LatentImage"},
+      "widgets_values": [768, 768, 1]
+    },
+    {
+      "id": 7,
+      "type": "SaveImage",
+      "pos": [990, 80],
+      "size": [270, 316],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {"localized_name": "images", "name": "images", "type": "IMAGE", "link": 8},
+        {"localized_name": "filename_prefix", "name": "filename_prefix", "type": "STRING", "widget": {"name": "filename_prefix"}, "link": null}
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": ["StoryPose/page_01"]
+    },
+    {
+      "id": 8,
+      "type": "KSampler",
+      "pos": [1160, 230],
+      "size": [270, 317.328125],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {"localized_name": "model", "name": "model", "type": "MODEL", "link": 1},
+        {"localized_name": "positive", "name": "positive", "type": "CONDITIONING", "link": 3},
+        {"localized_name": "negative", "name": "negative", "type": "CONDITIONING", "link": 5},
+        {"localized_name": "latent_image", "name": "latent_image", "type": "LATENT", "link": 4},
+        {"localized_name": "seed", "name": "seed", "type": "INT", "widget": {"name": "seed"}, "link": null},
+        {"localized_name": "steps", "name": "steps", "type": "INT", "widget": {"name": "steps"}, "link": null},
+        {"localized_name": "cfg", "name": "cfg", "type": "FLOAT", "widget": {"name": "cfg"}, "link": null},
+        {"localized_name": "sampler_name", "name": "sampler_name", "type": "COMBO", "widget": {"name": "sampler_name"}, "link": null},
+        {"localized_name": "scheduler", "name": "scheduler", "type": "COMBO", "widget": {"name": "scheduler"}, "link": null},
+        {"localized_name": "denoise", "name": "denoise", "type": "FLOAT", "widget": {"name": "denoise"}, "link": null}
+      ],
+      "outputs": [
+        {"localized_name": "LATENT", "name": "LATENT", "type": "LATENT", "links": [10]}
+      ],
+      "properties": {"Node name for S&R": "KSampler"},
+      "widgets_values": [123456789, "fixed", 20, 1, "euler", "simple", 1]
+    },
+    {
+      "id": 9,
+      "type": "CLIPTextEncode",
+      "pos": [1060, 630],
+      "size": [400, 200],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {"localized_name": "clip", "name": "clip", "type": "CLIP", "link": 6},
+        {"localized_name": "text", "name": "text", "type": "STRING", "widget": {"name": "text"}, "link": null}
+      ],
+      "outputs": [
+        {"localized_name": "CONDITIONING", "name": "CONDITIONING", "type": "CONDITIONING", "links": [5]}
+      ],
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": [""]
+    },
+    {
+      "id": 10,
+      "type": "VAEDecode",
+      "pos": [700, 50],
+      "size": [225, 72],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {"localized_name": "samples", "name": "samples", "type": "LATENT", "link": 10},
+        {"localized_name": "vae", "name": "vae", "type": "VAE", "link": 7}
+      ],
+      "outputs": [
+        {"localized_name": "IMAGE", "name": "IMAGE", "type": "IMAGE", "links": [8]}
+      ],
+      "properties": {"Node name for S&R": "VAEDecode"},
+      "widgets_values": []
+    }
+  ],
+  "links": [
+    [1, 1, 0, 8, 0, "MODEL"],
+    [2, 3, 0, 5, 0, "CLIP"],
+    [3, 5, 0, 8, 1, "CONDITIONING"],
+    [4, 6, 0, 8, 3, "LATENT"],
+    [5, 9, 0, 8, 2, "CONDITIONING"],
+    [6, 3, 0, 9, 0, "CLIP"],
+    [7, 4, 0, 10, 1, "VAE"],
+    [8, 10, 0, 7, 0, "IMAGE"],
+    [10, 8, 0, 10, 0, "LATENT"]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {"ds": {"scale": 0.8, "offset": [255, 79]}},
+  "version": 0.4
+}

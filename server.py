@@ -16,6 +16,14 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
+from storybook_pipeline import (
+    StorybookPipelineError,
+    create_storybook_html,
+    create_storybook_pdf,
+    estimate_claude_cost,
+    generate_images_for_pages,
+    generate_story_pages,
+)
 
 load_dotenv()
 
@@ -58,6 +66,21 @@ class GenerateImageRequest(BaseModel):
 class DetectGapsRequest(BaseModel):
     text: str
     previous_pages: list = []
+
+
+class StorybookRequest(BaseModel):
+    transcript: str
+    story_index: int = 0
+    claude_model: str | None = None
+    max_pages: int = 1
+    draft_only: bool = False
+
+
+class StorybookManualPageRequest(BaseModel):
+    title: str
+    story_text: str
+    image_description: str
+    page_number: int = 1
 
 # ---------------------------------------------------------------------------
 # Gap detection — Ollama (primary) with heuristic fallback
@@ -248,6 +271,176 @@ async def detect_gaps_endpoint(request: DetectGapsRequest):
     """Analyse story text and return gap-filling follow-up question."""
     result = await detect_story_gaps(request.text, request.previous_pages)
     return JSONResponse(result)
+
+
+@app.post("/storybook-from-text")
+async def storybook_from_text(request: StorybookRequest):
+    """
+    Build a full storybook from transcript text:
+    1) Claude page/story planning
+    2) fal.ai image generation
+    3) PDF assembly
+    """
+    transcript = (request.transcript or "").strip()
+    if not transcript:
+        raise HTTPException(status_code=400, detail="Transcript is required")
+    if request.story_index < 0 or request.story_index > 4:
+        raise HTTPException(status_code=400, detail="story_index must be between 0 and 4")
+    if request.max_pages < 1 or request.max_pages > 10:
+        raise HTTPException(status_code=400, detail="max_pages must be between 1 and 10")
+
+    try:
+        if request.claude_model:
+            story = await asyncio.to_thread(
+                generate_story_pages, transcript, request.claude_model
+            )
+        else:
+            story = await asyncio.to_thread(generate_story_pages, transcript)
+        stories = story.get("stories", [])
+        if stories:
+            selected_story = stories[request.story_index]
+        else:
+            selected_story = {"title": story["title"], "pages": story["pages"], "story_number": 1}
+
+        selected_story = {
+            **selected_story,
+            "pages": selected_story["pages"][: request.max_pages],
+        }
+
+        if request.draft_only:
+            cost = estimate_claude_cost(story.get("token_counts", []), pages=len(selected_story["pages"]))
+            return JSONResponse(
+                {
+                    "title": selected_story["title"],
+                    "story_number": selected_story.get("story_number", request.story_index + 1),
+                    "story_index": request.story_index,
+                    "model_used": story.get("model_used"),
+                    "models_tried": story.get("models_tried", []),
+                    "token_counts": story.get("token_counts", []),
+                    "cost": cost,
+                    "stories": stories if stories else [selected_story],
+                    "pages": selected_story["pages"],
+                    "draft_only": True,
+                }
+            )
+
+        pages_with_images = await asyncio.to_thread(
+            generate_images_for_pages, selected_story["pages"]
+        )
+        pdf_path = None
+        pdf_error = None
+        try:
+            pdf_path = await asyncio.to_thread(
+                create_storybook_pdf, selected_story["title"], pages_with_images
+            )
+        except StorybookPipelineError as exc:
+            pdf_error = str(exc)
+        html_path = await asyncio.to_thread(
+            create_storybook_html, selected_story["title"], pages_with_images
+        )
+    except StorybookPipelineError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Storybook pipeline failed: {exc}"
+        ) from exc
+
+    filename = Path(pdf_path).name if pdf_path else None
+    cost = estimate_claude_cost(story.get("token_counts", []), pages=len(selected_story["pages"]))
+    return JSONResponse(
+        {
+            "title": selected_story["title"],
+            "story_number": selected_story.get("story_number", request.story_index + 1),
+            "story_index": request.story_index,
+            "model_used": story.get("model_used"),
+            "models_tried": story.get("models_tried", []),
+            "token_counts": story.get("token_counts", []),
+            "cost": cost,
+            "stories": stories if stories else [selected_story],
+            "pages": pages_with_images,
+            "draft_only": False,
+            "pdf_path": pdf_path,
+            "html_path": html_path,
+            "pdf_download_url": f"/storybook-pdf/{filename}" if pdf_path else None,
+            "pdf_error": pdf_error,
+        }
+    )
+
+
+@app.post("/storybook-from-manual-page")
+async def storybook_from_manual_page(request: StorybookManualPageRequest):
+    """Generate exactly one page from provided story_text + image_description (no Claude call)."""
+    title = (request.title or "").strip()
+    story_text = (request.story_text or "").strip()
+    image_description = (request.image_description or "").strip()
+    page_number = int(request.page_number or 1)
+
+    if not title:
+        raise HTTPException(status_code=400, detail="title is required")
+    if not story_text:
+        raise HTTPException(status_code=400, detail="story_text is required")
+    if not image_description:
+        raise HTTPException(status_code=400, detail="image_description is required")
+    if page_number < 1:
+        raise HTTPException(status_code=400, detail="page_number must be >= 1")
+
+    page = {
+        "page_number": page_number,
+        "story_text": story_text,
+        "image_description": image_description,
+    }
+
+    try:
+        pages_with_images = await asyncio.to_thread(generate_images_for_pages, [page])
+        pdf_path = None
+        pdf_error = None
+        try:
+            pdf_path = await asyncio.to_thread(create_storybook_pdf, title, pages_with_images)
+        except StorybookPipelineError as exc:
+            pdf_error = str(exc)
+        html_path = await asyncio.to_thread(create_storybook_html, title, pages_with_images)
+    except StorybookPipelineError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Manual page pipeline failed: {exc}") from exc
+
+    filename = Path(pdf_path).name if pdf_path else None
+    return JSONResponse(
+        {
+            "title": title,
+            "pages": pages_with_images,
+            "draft_only": False,
+            "claude_used": False,
+            "cost": {
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "session_cost_usd": 0,
+                "per_page_cost_usd": 0,
+            },
+            "pdf_path": pdf_path,
+            "html_path": html_path,
+            "pdf_download_url": f"/storybook-pdf/{filename}" if pdf_path else None,
+            "pdf_error": pdf_error,
+        }
+    )
+
+
+@app.get("/storybook-pdf/{filename}")
+async def get_storybook_pdf(filename: str):
+    """Download a generated storybook PDF by filename from STORYBOOK_OUTPUT_DIR."""
+    output_dir = Path(os.getenv("STORYBOOK_OUTPUT_DIR", os.getcwd()))
+    candidate = (output_dir / filename).resolve()
+
+    if candidate.suffix.lower() != ".pdf":
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    if not candidate.exists() or not candidate.is_file():
+        raise HTTPException(status_code=404, detail="PDF not found")
+
+    # Prevent path escape outside configured output dir.
+    if output_dir.resolve() not in candidate.parents and candidate != output_dir.resolve():
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+    return FileResponse(str(candidate), media_type="application/pdf", filename=filename)
 
 
 # ---------------------------------------------------------------------------
