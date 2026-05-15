@@ -420,6 +420,25 @@ def enrich_image_prompt(page: dict[str, Any], story: dict[str, Any], visual_memo
     return compact_prompt_text(" ".join(part for part in parts if part), max_words=210)
 
 
+def build_flux_prompts(page: dict[str, Any], story: dict[str, Any], visual_memory: str = "") -> tuple[str, str]:
+    """Return separate prompts for FLUX CLIP and T5 encoders.
+
+    `prompt` feeds CLIP, which is limited to ~77 tokens. `prompt_2` feeds T5,
+    which can carry the fuller scene/continuity instruction.
+    """
+    scene = compact_prompt_text(page["image_description"], max_words=32)
+    memory_lock = compact_prompt_text(visual_memory, max_words=18)
+    style = "soft watercolor storybook, dreamy pastels, warm magical light, no text"
+    clip_parts = [
+        scene,
+        memory_lock,
+        style,
+    ]
+    clip_prompt = compact_prompt_text(" ".join(part for part in clip_parts if part), max_words=58)
+    t5_prompt = enrich_image_prompt(page, story, visual_memory=visual_memory)
+    return clip_prompt, t5_prompt
+
+
 def generate_images(story: dict[str, Any], pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     pipe = load_flux_pipeline()
     slug = safe_slug(story["title"])
@@ -428,16 +447,18 @@ def generate_images(story: dict[str, Any], pages: list[dict[str, Any]]) -> list[
 
     for page in pages:
         page_number = int(page["page_number"])
-        prompt = enrich_image_prompt(page, story, visual_memory=visual_memory)
+        clip_prompt, t5_prompt = build_flux_prompts(page, story, visual_memory=visual_memory)
         generator = torch.Generator("cuda").manual_seed(SEED + page_number)
         print(f"Generating page {page_number}: {page['story_text'][:70]}...")
         image = pipe(
-            prompt=prompt,
+            prompt=clip_prompt,
+            prompt_2=t5_prompt,
             width=WIDTH,
             height=HEIGHT,
             num_inference_steps=STEPS,
             guidance_scale=GUIDANCE,
             generator=generator,
+            max_sequence_length=512,
         ).images[0]
 
         image_path = IMAGE_ROOT / f"{slug}-page-{page_number:02d}-{uuid.uuid4().hex[:8]}.png"
@@ -447,7 +468,9 @@ def generate_images(story: dict[str, Any], pages: list[dict[str, Any]]) -> list[
             {
                 **page,
                 "image_path": str(image_path),
-                "final_prompt": prompt,
+                "clip_prompt": clip_prompt,
+                "t5_prompt": t5_prompt,
+                "final_prompt": t5_prompt,
                 "visual_memory_used": visual_memory,
             }
         )
