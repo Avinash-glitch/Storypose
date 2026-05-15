@@ -79,6 +79,7 @@ SEED = int(os.environ.get("STORYPOSE_SEED", "20260515"))
 MAX_PAGES = int(os.environ.get("STORYPOSE_MAX_PAGES", "6"))
 TEST_PAGES = int(os.environ.get("STORYPOSE_TEST_PAGES", "1"))
 WHISPER_MODEL = os.environ.get("STORYPOSE_WHISPER_MODEL", "base")
+USE_PAGE1_VISUAL_MEMORY = os.environ.get("STORYPOSE_USE_PAGE1_VISUAL_MEMORY", "1").strip() != "0"
 
 DRIVE_ROOT = Path("/content/drive/MyDrive/storypose-colab")
 OUTPUT_ROOT = DRIVE_ROOT / "outputs"
@@ -214,6 +215,57 @@ def test_claude_model(model: str = CLAUDE_MODEL) -> str:
     return result.content[0].text.strip()
 
 
+def create_visual_memory_from_image(image_path: str, story: dict[str, Any], model: str = CLAUDE_MODEL) -> str:
+    """Create text-only visual memory from page 1. No image vectors are stored."""
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return ""
+
+    raw = Path(image_path).read_bytes()
+    image_b64 = base64.b64encode(raw).decode("ascii")
+    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    prompt = f"""
+You are creating a reusable visual continuity memory for a children's storybook.
+Look at this generated page 1 image and describe only stable visual details that should stay consistent.
+
+Story title: {story.get("title", "")}
+Existing character bible:
+{story.get("character_bible", "")}
+
+Return compact plain text, no markdown. Include:
+- recurring character appearance
+- outfit colors
+- face/hair/body traits
+- illustration style
+- color palette
+- any stable recurring objects/settings
+
+Do not describe page-specific action unless it affects continuity.
+Keep under 180 words.
+""".strip()
+    message = client.messages.create(
+        model=model,
+        max_tokens=500,
+        temperature=0.2,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": image_b64,
+                        },
+                    },
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ],
+    )
+    return "".join(block.text for block in message.content if getattr(block, "type", None) == "text").strip()
+
+
 def extract_json(text: str) -> dict[str, Any]:
     text = text.strip()
     fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
@@ -285,13 +337,25 @@ def load_flux_pipeline() -> FluxPipeline:
     return pipe
 
 
-def enrich_image_prompt(page: dict[str, Any], story: dict[str, Any]) -> str:
+def enrich_image_prompt(page: dict[str, Any], story: dict[str, Any], visual_memory: str = "") -> str:
+    visual_memory_block = ""
+    if visual_memory:
+        visual_memory_block = f"""
+TEXT-ONLY VISUAL MEMORY FROM APPROVED PAGE 1:
+{visual_memory}
+
+Continuity rule: preserve the same character identity, outfit, proportions, color palette,
+and illustration style from this memory. Do not redesign recurring characters.
+""".strip()
+
     return f"""
 CHARACTER BIBLE:
 {story.get("character_bible", "")}
 
 STYLE BIBLE:
 {story.get("style_bible", "")}
+
+{visual_memory_block}
 
 PAGE {page["page_number"]} ILLUSTRATION:
 {page["image_description"]}
@@ -306,10 +370,11 @@ def generate_images(story: dict[str, Any], pages: list[dict[str, Any]]) -> list[
     pipe = load_flux_pipeline()
     slug = safe_slug(story["title"])
     complete_pages: list[dict[str, Any]] = []
+    visual_memory = ""
 
     for page in pages:
         page_number = int(page["page_number"])
-        prompt = enrich_image_prompt(page, story)
+        prompt = enrich_image_prompt(page, story, visual_memory=visual_memory)
         generator = torch.Generator("cuda").manual_seed(SEED + page_number)
         print(f"Generating page {page_number}: {page['story_text'][:70]}...")
         image = pipe(
@@ -324,7 +389,25 @@ def generate_images(story: dict[str, Any], pages: list[dict[str, Any]]) -> list[
         image_path = IMAGE_ROOT / f"{slug}-page-{page_number:02d}-{uuid.uuid4().hex[:8]}.png"
         image.save(image_path)
 
-        complete_pages.append({**page, "image_path": str(image_path), "final_prompt": prompt})
+        complete_pages.append(
+            {
+                **page,
+                "image_path": str(image_path),
+                "final_prompt": prompt,
+                "visual_memory_used": visual_memory,
+            }
+        )
+
+        if page_number == 1 and USE_PAGE1_VISUAL_MEMORY and len(pages) > 1:
+            print("Creating text-only visual memory from page 1 for later pages...")
+            try:
+                visual_memory = create_visual_memory_from_image(str(image_path), story)
+                (OUTPUT_ROOT / f"{slug}-visual-memory.txt").write_text(visual_memory, encoding="utf-8")
+                print("Visual memory:", visual_memory[:500])
+            except Exception as exc:
+                print(f"Visual memory skipped: {type(exc).__name__}: {exc}")
+                visual_memory = ""
+
         gc.collect()
         torch.cuda.empty_cache()
 
