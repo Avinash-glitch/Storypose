@@ -70,7 +70,7 @@ from reportlab.lib.utils import ImageReader
 # Runtime config
 # -------------------------
 MODEL_ID = os.environ.get("STORYPOSE_FLUX_MODEL", "black-forest-labs/FLUX.1-dev")
-CLAUDE_MODEL = os.environ.get("STORYPOSE_CLAUDE_MODEL", "claude-sonnet-4-20250514")
+CLAUDE_MODEL = os.environ.get("STORYPOSE_CLAUDE_MODEL", "claude-sonnet-4-5-20250929")
 WIDTH = int(os.environ.get("STORYPOSE_WIDTH", "1024"))
 HEIGHT = int(os.environ.get("STORYPOSE_HEIGHT", "1024"))
 STEPS = int(os.environ.get("STORYPOSE_STEPS", "28"))
@@ -78,7 +78,7 @@ GUIDANCE = float(os.environ.get("STORYPOSE_GUIDANCE", "3.5"))
 SEED = int(os.environ.get("STORYPOSE_SEED", "20260515"))
 MAX_PAGES = int(os.environ.get("STORYPOSE_MAX_PAGES", "6"))
 TEST_PAGES = int(os.environ.get("STORYPOSE_TEST_PAGES", "1"))
-WHISPER_MODEL = os.environ.get("STORYPOSE_WHISPER_MODEL", "base")
+WHISPER_MODEL = os.environ.get("STORYPOSE_WHISPER_MODEL", "medium")
 USE_PAGE1_VISUAL_MEMORY = os.environ.get("STORYPOSE_USE_PAGE1_VISUAL_MEMORY", "1").strip() != "0"
 
 DRIVE_ROOT = Path("/content/drive/MyDrive/storypose-colab")
@@ -143,6 +143,7 @@ class TokenCost:
 
 MODEL_PRICES_PER_MTOK = {
     # Update these if Anthropic changes pricing.
+    "claude-sonnet-4-5-20250929": {"input": 3.00, "output": 15.00},
     "claude-sonnet-4-20250514": {"input": 3.00, "output": 15.00},
     "claude-3-5-sonnet-20241022": {"input": 3.00, "output": 15.00},
     "claude-3-5-haiku-20241022": {"input": 0.80, "output": 4.00},
@@ -315,15 +316,60 @@ def upload_and_transcribe_story() -> str:
     if not uploaded:
         raise RuntimeError("No audio file uploaded.")
     audio_path = Path("/content") / next(iter(uploaded.keys()))
+    prepared_audio_path = prepare_audio_for_whisper(audio_path)
 
     import whisper
 
     print(f"Loading Whisper model: {WHISPER_MODEL}")
     model = whisper.load_model(WHISPER_MODEL)
-    result = model.transcribe(str(audio_path))
+    result = model.transcribe(
+        str(prepared_audio_path),
+        language="en",
+        task="transcribe",
+        fp16=torch.cuda.is_available(),
+        temperature=0,
+        beam_size=5,
+        best_of=5,
+        condition_on_previous_text=True,
+        initial_prompt=(
+            "This is a children's fantasy story. Preserve the opening sentences, character names, "
+            "storybook language, and unusual proper nouns as accurately as possible."
+        ),
+    )
     transcript = result["text"].strip()
     print("\nTranscript:\n", transcript)
     return transcript
+
+
+def prepare_audio_for_whisper(audio_path: Path) -> Path:
+    """Convert uploaded audio to 16 kHz mono WAV with leading silence.
+
+    The short silence helps Whisper avoid clipping/missing speech that starts
+    immediately at timestamp zero.
+    """
+    output_path = Path("/content") / f"storypose_prepared_{uuid.uuid4().hex[:8]}.wav"
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-t",
+        "1.5",
+        "-i",
+        "anullsrc=channel_layout=mono:sample_rate=16000",
+        "-i",
+        str(audio_path),
+        "-filter_complex",
+        "[1:a]aresample=16000,aformat=channel_layouts=mono,volume=1.4[a1];[0:a][a1]concat=n=2:v=0:a=1[out]",
+        "-map",
+        "[out]",
+        str(output_path),
+    ]
+    subprocess.run(cmd, check=True)
+    return output_path
 
 
 def load_flux_pipeline() -> FluxPipeline:
