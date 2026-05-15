@@ -241,7 +241,7 @@ Return compact plain text, no markdown. Include:
 - any stable recurring objects/settings
 
 Do not describe page-specific action unless it affects continuity.
-Keep under 180 words.
+Keep under 70 words. Plain comma-separated phrases are best.
 """.strip()
     message = client.messages.create(
         model=model,
@@ -264,7 +264,10 @@ Keep under 180 words.
             }
         ],
     )
-    return "".join(block.text for block in message.content if getattr(block, "type", None) == "text").strip()
+    return compact_prompt_text(
+        "".join(block.text for block in message.content if getattr(block, "type", None) == "text"),
+        max_words=80,
+    )
 
 
 def extract_json(text: str) -> dict[str, Any]:
@@ -383,33 +386,38 @@ def load_flux_pipeline() -> FluxPipeline:
     return pipe
 
 
+def compact_prompt_text(text: str, max_words: int = 140) -> str:
+    text = re.sub(r"[*_#`>-]+", " ", str(text))
+    text = re.sub(r"\s+", " ", text).strip()
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    return " ".join(words[:max_words]).rsplit(",", 1)[0].strip()
+
+
 def enrich_image_prompt(page: dict[str, Any], story: dict[str, Any], visual_memory: str = "") -> str:
-    visual_memory_block = ""
-    if visual_memory:
-        visual_memory_block = f"""
-TEXT-ONLY VISUAL MEMORY FROM APPROVED PAGE 1:
-{visual_memory}
+    """Build a short FLUX prompt.
 
-Continuity rule: preserve the same character identity, outfit, proportions, color palette,
-and illustration style from this memory. Do not redesign recurring characters.
-""".strip()
+    FLUX uses CLIP and T5 text encoders. CLIP is very short and T5 is capped,
+    so put the current scene first and keep continuity text compact.
+    """
+    scene = compact_prompt_text(page["image_description"], max_words=70)
+    character_lock = compact_prompt_text(story.get("character_bible", ""), max_words=55)
+    style_lock = compact_prompt_text(story.get("style_bible", ""), max_words=35)
+    memory_lock = compact_prompt_text(visual_memory, max_words=45)
 
-    return f"""
-CHARACTER BIBLE:
-{story.get("character_bible", "")}
-
-STYLE BIBLE:
-{story.get("style_bible", "")}
-
-{visual_memory_block}
-
-PAGE {page["page_number"]} ILLUSTRATION:
-{page["image_description"]}
-
-Composition: premium children's storybook spread illustration, strong focal point, soft natural light,
-gentle emotion, consistent character design, polished watercolor and gouache texture.
-No text, no lettering, no captions, no speech bubbles, no watermark.
-""".strip()
+    parts = [
+        f"Page {page['page_number']} scene: {scene}",
+        f"Character continuity: {character_lock}" if character_lock else "",
+        f"Approved page 1 visual memory: {memory_lock}" if memory_lock else "",
+        f"Style: {style_lock}" if style_lock else "",
+        (
+            "Premium children's storybook illustration, soft watercolor and gouache texture, "
+            "warm emotional lighting, rounded friendly shapes, consistent character design, "
+            "no words, no letters, no captions, no watermark."
+        ),
+    ]
+    return compact_prompt_text(" ".join(part for part in parts if part), max_words=210)
 
 
 def generate_images(story: dict[str, Any], pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
