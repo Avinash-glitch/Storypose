@@ -98,6 +98,8 @@ Every page image_description must repeat the exact visual traits needed for recu
 Every page image_description must primarily describe what is happening in the scene: action, setting,
 character placement, emotion, props, weather/light, and story stakes.
 Avoid static character portraits or character lineups unless the page story explicitly requires them.
+Treat every illustration as a story beat: the image must show a clear action or change in the story,
+similar to a classic picture book where each picture explains what is happening even without text.
 Images must contain no written words, captions, speech bubbles, logos, or watermarks.
 """.strip()
 
@@ -119,6 +121,8 @@ Requirements:
 - Include: who is doing what, where they are, what has changed, emotional mood, key objects, and camera/composition.
 - Prefer dynamic verbs like flying, catching, hiding, searching, building, lifting, chasing, rescuing, whispering, discovering.
 - Avoid generic prompts like "the characters standing together" unless the page is actually about standing together.
+- If characters are speaking, show body language, facial expressions, and reactions. Do not use speech bubbles or text.
+- The image must make sense without reading the story_text.
 - Use the page design tone of a premium printed storybook: warm, soft, whimsical, emotionally clear.
 - The image style should be consistent across pages.
 - Do not include text inside images.
@@ -133,6 +137,9 @@ Return JSON exactly:
     {{
       "page_number": 1,
       "story_text": "string",
+      "scene_action": "single most visual action happening on this page",
+      "setting": "where the illustration takes place",
+      "emotion": "main emotional tone of this scene",
       "image_description": "string"
     }}
   ]
@@ -312,6 +319,11 @@ def generate_story_pages_with_claude(transcript: str, max_pages: int = MAX_PAGES
             data = extract_json(text)
             if not data.get("title") or not isinstance(data.get("pages"), list):
                 raise ValueError("Claude JSON missing title/pages.")
+            for page in data["pages"]:
+                if isinstance(page, dict):
+                    page.setdefault("scene_action", page.get("image_description", ""))
+                    page.setdefault("setting", "")
+                    page.setdefault("emotion", "")
             output_tokens = getattr(message.usage, "output_tokens", None)
             return data, estimate_cost(model, input_tokens, output_tokens)
         except Exception as exc:
@@ -409,13 +421,19 @@ def enrich_image_prompt(page: dict[str, Any], story: dict[str, Any], visual_memo
     FLUX uses CLIP and T5 text encoders. CLIP is very short and T5 is capped,
     so put the current scene first and keep continuity text compact.
     """
-    scene = compact_prompt_text(page["image_description"], max_words=70)
+    scene_action = compact_prompt_text(page.get("scene_action", ""), max_words=32)
+    setting = compact_prompt_text(page.get("setting", ""), max_words=18)
+    emotion = compact_prompt_text(page.get("emotion", ""), max_words=12)
+    image_description = compact_prompt_text(page["image_description"], max_words=58)
     character_lock = compact_prompt_text(story.get("character_bible", ""), max_words=55)
     style_lock = compact_prompt_text(story.get("style_bible", ""), max_words=35)
     memory_lock = compact_prompt_text(visual_memory, max_words=45)
 
     parts = [
-        f"Page {page['page_number']} scene: {scene}",
+        f"Story action: {scene_action}" if scene_action else "",
+        f"Setting: {setting}" if setting else "",
+        f"Emotion: {emotion}" if emotion else "",
+        f"Visual scene: {image_description}",
         f"Character continuity: {character_lock}" if character_lock else "",
         f"Approved page 1 visual memory: {memory_lock}" if memory_lock else "",
         f"Style: {style_lock}" if style_lock else "",
@@ -434,10 +452,12 @@ def build_flux_prompts(page: dict[str, Any], story: dict[str, Any], visual_memor
     `prompt` feeds CLIP, which is limited to ~77 tokens. `prompt_2` feeds T5,
     which can carry the fuller scene/continuity instruction.
     """
-    scene = compact_prompt_text(page["image_description"], max_words=32)
+    action = compact_prompt_text(page.get("scene_action", ""), max_words=22)
+    scene = compact_prompt_text(page["image_description"], max_words=28)
     memory_lock = compact_prompt_text(visual_memory, max_words=18)
     style = "soft watercolor storybook, dreamy pastels, warm magical light, no text"
     clip_parts = [
+        action,
         scene,
         memory_lock,
         style,
