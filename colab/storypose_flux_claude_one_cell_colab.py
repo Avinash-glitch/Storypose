@@ -95,6 +95,9 @@ Create a cohesive storybook from the child's spoken story.
 You must preserve the child's core idea while making it readable, gentle, and age-appropriate.
 For visual consistency, create a reusable character_bible and style_bible.
 Every page image_description must repeat the exact visual traits needed for recurring characters.
+Every page image_description must primarily describe what is happening in the scene: action, setting,
+character placement, emotion, props, weather/light, and story stakes.
+Avoid static character portraits or character lineups unless the page story explicitly requires them.
 Images must contain no written words, captions, speech bubbles, logos, or watermarks.
 """.strip()
 
@@ -111,6 +114,11 @@ Requirements:
 - For testing, the caller may use only the first page, but still make the full plan coherent.
 - Each story_text must be under 100 words.
 - Each image_description must be detailed enough for FLUX.1-dev.
+- Each image_description must show a clear story moment, not just characters posing.
+- Start each image_description with the main action happening in that page.
+- Include: who is doing what, where they are, what has changed, emotional mood, key objects, and camera/composition.
+- Prefer dynamic verbs like flying, catching, hiding, searching, building, lifting, chasing, rescuing, whispering, discovering.
+- Avoid generic prompts like "the characters standing together" unless the page is actually about standing together.
 - Use the page design tone of a premium printed storybook: warm, soft, whimsical, emotionally clear.
 - The image style should be consistent across pages.
 - Do not include text inside images.
@@ -412,9 +420,9 @@ def enrich_image_prompt(page: dict[str, Any], story: dict[str, Any], visual_memo
         f"Approved page 1 visual memory: {memory_lock}" if memory_lock else "",
         f"Style: {style_lock}" if style_lock else "",
         (
-            "Premium children's storybook illustration, soft watercolor and gouache texture, "
-            "warm emotional lighting, rounded friendly shapes, consistent character design, "
-            "no words, no letters, no captions, no watermark."
+            "Show the story action clearly, not a portrait. Premium children's storybook illustration, "
+            "soft watercolor and gouache texture, warm emotional lighting, rounded friendly shapes, "
+            "consistent character design, no words, no letters, no captions, no watermark."
         ),
     ]
     return compact_prompt_text(" ".join(part for part in parts if part), max_words=210)
