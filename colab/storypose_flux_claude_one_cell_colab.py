@@ -41,6 +41,7 @@ def pip_install() -> None:
         "safetensors",
         "huggingface_hub>=0.26.0",
         "anthropic>=0.50.0",
+        "json-repair>=0.30.0",
         "requests>=2.32.0",
         "reportlab>=4.2.0",
         "openai-whisper>=20250625",
@@ -56,6 +57,7 @@ from anthropic import Anthropic
 from diffusers import FluxPipeline
 from google.colab import drive, files
 from huggingface_hub import login as hf_login
+from json_repair import repair_json
 from PIL import Image
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
@@ -408,6 +410,64 @@ MODEL_PRICES_PER_MTOK = {
 }
 
 
+STORYBOOK_PLAN_TOOL = {
+    "name": "create_storybook_plan",
+    "description": "Create a structured children's storybook plan for StoryPose.",
+    "input_schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["title", "subtitle", "characters", "character_bible", "style_bible", "pages"],
+        "properties": {
+            "title": {"type": "string"},
+            "subtitle": {"type": "string"},
+            "characters": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": True,
+                    "required": ["character_id", "name", "role", "visual_identity", "personality", "do_not_change"],
+                    "properties": {
+                        "character_id": {"type": "string"},
+                        "name": {"type": "string"},
+                        "role": {"type": "string"},
+                        "visual_identity": {"type": "string"},
+                        "personality": {"type": "string"},
+                        "do_not_change": {"type": "array", "items": {"type": "string"}},
+                    },
+                },
+            },
+            "character_bible": {"type": "string"},
+            "style_bible": {"type": "string"},
+            "pages": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [
+                        "page_number",
+                        "story_text",
+                        "scene_action",
+                        "setting",
+                        "emotion",
+                        "image_description",
+                    ],
+                    "properties": {
+                        "page_number": {"type": "integer"},
+                        "story_text": {"type": "string"},
+                        "scene_action": {"type": "string"},
+                        "setting": {"type": "string"},
+                        "emotion": {"type": "string"},
+                        "image_description": {"type": "string"},
+                    },
+                },
+            },
+        },
+    },
+}
+
+
 def ensure_dirs() -> None:
     for folder in [OUTPUT_ROOT, IMAGE_ROOT, HTML_ROOT, PDF_ROOT]:
         folder.mkdir(parents=True, exist_ok=True)
@@ -537,7 +597,43 @@ def extract_json(text: str) -> dict[str, Any]:
         match = re.search(r"(\{.*\})", text, re.DOTALL)
         if match:
             text = match.group(1)
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        repaired = repair_json(text, return_objects=True)
+        if isinstance(repaired, dict):
+            return repaired
+        return json.loads(str(repaired))
+
+
+def extract_tool_input(message: Any, tool_name: str) -> dict[str, Any] | None:
+    for block in getattr(message, "content", []) or []:
+        block_type = getattr(block, "type", None)
+        block_name = getattr(block, "name", None)
+        if block_type == "tool_use" and block_name == tool_name:
+            tool_input = getattr(block, "input", None)
+            if isinstance(tool_input, dict):
+                return tool_input
+    return None
+
+
+def normalize_story_data(data: dict[str, Any], selected_characters: list[dict[str, Any]]) -> dict[str, Any]:
+    if not data.get("title") or not isinstance(data.get("pages"), list):
+        raise ValueError("Claude output missing title/pages.")
+    data.setdefault("subtitle", "")
+    data.setdefault("characters", selected_characters)
+    data.setdefault("character_bible", "")
+    data.setdefault("style_bible", "")
+    for idx, page in enumerate(data["pages"], start=1):
+        if not isinstance(page, dict):
+            raise ValueError(f"Page {idx} is not an object.")
+        page.setdefault("page_number", idx)
+        page.setdefault("story_text", "")
+        page.setdefault("scene_action", page.get("image_description", ""))
+        page.setdefault("setting", "")
+        page.setdefault("emotion", "")
+        page.setdefault("image_description", page.get("scene_action", ""))
+    return data
 
 
 def generate_story_pages_with_claude(
@@ -562,23 +658,20 @@ def generate_story_pages_with_claude(
                 max_tokens=5000,
                 temperature=0.55,
                 system=SYSTEM_PROMPT,
+                tools=[STORYBOOK_PLAN_TOOL],
+                tool_choice={"type": "tool", "name": "create_storybook_plan"},
                 messages=[{"role": "user", "content": prompt}],
             )
-            text = "".join(block.text for block in message.content if getattr(block, "type", None) == "text")
-            data = extract_json(text)
-            if not data.get("title") or not isinstance(data.get("pages"), list):
-                raise ValueError("Claude JSON missing title/pages.")
-            data.setdefault("characters", selected_characters)
-            for page in data["pages"]:
-                if isinstance(page, dict):
-                    page.setdefault("scene_action", page.get("image_description", ""))
-                    page.setdefault("setting", "")
-                    page.setdefault("emotion", "")
+            data = extract_tool_input(message, "create_storybook_plan")
+            if data is None:
+                text = "".join(block.text for block in message.content if getattr(block, "type", None) == "text")
+                data = extract_json(text)
+            data = normalize_story_data(data, selected_characters)
             output_tokens = getattr(message.usage, "output_tokens", None)
             return data, estimate_cost(model, input_tokens, output_tokens)
         except Exception as exc:
             last_error = exc
-            prompt += "\n\nRetry: return only syntactically valid JSON matching the schema exactly."
+            prompt += "\n\nRetry using the create_storybook_plan tool schema exactly. Keep string values concise."
 
     raise RuntimeError(f"Claude failed to produce valid story JSON: {last_error}")
 
