@@ -790,51 +790,95 @@ def draw_button(c: canvas.Canvas, x: float, y: float, w: float, h: float, label:
     c.linkRect("", dest, (x, y, x + w, y + h), relative=0, thickness=0)
 
 
+def fit_paragraph(
+    text: str,
+    *,
+    font_name: str,
+    font_size: int,
+    min_font_size: int,
+    leading_ratio: float,
+    width: float,
+    max_height: float,
+    color: colors.Color,
+) -> tuple[Paragraph, float, int]:
+    """Create a ReportLab paragraph that fits the available box."""
+    safe_text = html.escape(str(text)).replace("\n", "<br/>")
+    size = font_size
+    while size >= min_font_size:
+        style = ParagraphStyle(
+            name=f"Fit-{font_name}-{size}",
+            fontName=font_name,
+            fontSize=size,
+            leading=size * leading_ratio,
+            textColor=color,
+        )
+        para = Paragraph(safe_text, style)
+        _, height = para.wrap(width, max_height)
+        if height <= max_height:
+            return para, height, size
+        size -= 1
+
+    style = ParagraphStyle(
+        name=f"Fit-{font_name}-{min_font_size}",
+        fontName=font_name,
+        fontSize=min_font_size,
+        leading=min_font_size * leading_ratio,
+        textColor=color,
+    )
+    para = Paragraph(safe_text, style)
+    _, height = para.wrap(width, max_height)
+    return para, min(height, max_height), min_font_size
+
+
 def save_linked_pdf(title: str, pages: list[dict[str, Any]], subtitle: str = "") -> str:
     slug = safe_slug(title)
     path = PDF_ROOT / f"{slug}-{uuid.uuid4().hex[:8]}.pdf"
     c = canvas.Canvas(str(path), pagesize=landscape(letter))
     page_w, page_h = landscape(letter)
 
-    text_style = ParagraphStyle(
-        name="StoryText",
-        fontName="Helvetica",
-        fontSize=15,
-        leading=24,
-        textColor=colors.HexColor("#253238"),
-    )
-
     for idx, page in enumerate(pages):
         bookmark = f"page_{idx + 1}"
         c.bookmarkPage(bookmark)
 
-        c.setFillColor(colors.HexColor("#ffe9b0"))
+        c.setFillColor(colors.HexColor("#ffe4aa"))
         c.rect(0, 0, page_w, page_h, fill=1, stroke=0)
-        margin = 0.52 * inch
-        panel_w = page_w - 2 * margin
-        panel_h = page_h - 2 * margin
-        c.setFillColor(colors.HexColor("#fffdf8"))
-        c.roundRect(margin, margin, panel_w, panel_h, 20, fill=1, stroke=0)
 
-        left_w = panel_w * 0.52
-        right_w = panel_w - left_w
-        left_x = margin
-        right_x = margin + left_w
-        panel_y = margin
+        outer_x = 0.48 * inch
+        outer_y = 0.38 * inch
+        topbar_h = 0.36 * inch
+        book_x = outer_x
+        book_y = outer_y
+        book_w = page_w - 2 * outer_x
+        book_h = page_h - outer_y - topbar_h - 0.42 * inch
+
+        c.setFillColor(colors.HexColor("#3b1711"))
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(outer_x + 4, page_h - 0.55 * inch, "STORYPOSE  ·  READ ALOUD")
+        c.setFont("Helvetica", 8)
+        c.drawRightString(page_w - outer_x - 4, page_h - 0.55 * inch, f"{idx + 1:02d} / {len(pages):02d}")
+
+        c.setFillColor(colors.HexColor("#fffdf8"))
+        c.roundRect(book_x, book_y, book_w, book_h, 20, fill=1, stroke=0)
+
+        left_w = book_w * 0.52
+        right_w = book_w - left_w
+        left_x = book_x
+        right_x = book_x + left_w
+        panel_y = book_y
 
         img = ImageReader(page["image_path"])
         img_w, img_h = img.getSize()
-        scale = max(left_w / img_w, panel_h / img_h)
+        scale = max(left_w / img_w, book_h / img_h)
         draw_w = img_w * scale
         draw_h = img_h * scale
         c.saveState()
         clip = c.beginPath()
-        clip.rect(left_x, panel_y, left_w, panel_h)
+        clip.rect(left_x, panel_y, left_w, book_h)
         c.clipPath(clip, stroke=0, fill=0)
         c.drawImage(
             img,
             left_x + (left_w - draw_w) / 2,
-            panel_y + (panel_h - draw_h) / 2,
+            panel_y + (book_h - draw_h) / 2,
             draw_w,
             draw_h,
             preserveAspectRatio=True,
@@ -844,53 +888,69 @@ def save_linked_pdf(title: str, pages: list[dict[str, Any]], subtitle: str = "")
 
         # Keep the text page clean even if a PDF renderer handles clipping loosely.
         c.setFillColor(colors.HexColor("#fffdf8"))
-        c.rect(right_x, panel_y, right_w, panel_h, fill=1, stroke=0)
+        c.rect(right_x, panel_y, right_w, book_h, fill=1, stroke=0)
 
         c.setFillColor(colors.HexColor("#ffd94d"))
-        c.roundRect(left_x + 18, page_h - margin - 34, 96, 22, 11, fill=1, stroke=0)
+        c.roundRect(left_x + 16, book_y + book_h - 34, 168, 22, 11, fill=1, stroke=0)
         c.setFillColor(colors.HexColor("#2f2116"))
         c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(left_x + 66, page_h - margin - 28, "Chapter One")
+        c.drawString(left_x + 28, book_y + book_h - 28, "Chapter One")
 
-        text_x = right_x + 42
-        top = page_h - margin - 54
-        c.setFillColor(colors.HexColor("#d88659"))
+        text_pad_x = 0.48 * inch
+        text_x = right_x + text_pad_x
+        text_w = right_w - 2 * text_pad_x
+        top = book_y + book_h - 0.55 * inch
+        footer_y = book_y + 0.55 * inch
+
+        c.setFillColor(colors.HexColor("#ce7a55"))
         c.setFont("Helvetica-Bold", 8)
-        c.drawString(text_x, top, "O N C E   U P O N   A   T I M E")
+        c.drawString(text_x, top, "A  S T O R Y B O O K  C L A S S I C")
 
-        c.setFillColor(colors.HexColor("#3a120f"))
-        c.setFont("Times-Bold", 32)
-        title_lines = title.split(" ", 3)
-        if len(title_lines) > 3:
-            title_draw = f"{' '.join(title_lines[:3])}\n{title_lines[3]}"
-        else:
-            title_draw = title
-        y = top - 42
-        for line in title_draw.splitlines():
-            c.drawString(text_x, y, line)
-            y -= 36
+        title_para, title_h, title_size = fit_paragraph(
+            title,
+            font_name="Times-Bold",
+            font_size=32,
+            min_font_size=22,
+            leading_ratio=1.04,
+            width=text_w,
+            max_height=1.05 * inch,
+            color=colors.HexColor("#3b1711"),
+        )
+        title_y = top - 0.22 * inch - title_h
+        title_para.drawOn(c, text_x, title_y)
+        y = title_y - 0.18 * inch
 
         if subtitle:
             c.setFillColor(colors.HexColor("#5f6f76"))
             c.setFont("Helvetica-Oblique", 11)
-            c.drawString(text_x, y + 8, subtitle[:80])
-            y -= 18
+            c.drawString(text_x, y, subtitle[:90])
+            y -= 0.32 * inch
 
         paragraphs = split_paragraphs(str(page["story_text"]))
-        flow = Paragraph("<br/><br/>".join(html.escape(p) for p in paragraphs), text_style)
-        flow.wrapOn(c, right_w - 78, y - margin - 78)
-        flow.drawOn(c, text_x, max(margin + 86, y - flow.height - 10))
+        story_text = "\n\n".join(paragraphs)
+        story_max_h = max(1.0 * inch, y - footer_y - 0.48 * inch)
+        flow, flow_h, story_size = fit_paragraph(
+            story_text,
+            font_name="Helvetica",
+            font_size=14,
+            min_font_size=9,
+            leading_ratio=1.65,
+            width=text_w,
+            max_height=story_max_h,
+            color=colors.HexColor("#3b1711"),
+        )
+        flow.drawOn(c, text_x, y - flow_h)
 
         c.setFillColor(colors.HexColor("#59666b"))
         c.setFont("Helvetica", 10)
-        c.line(text_x, margin + 64, page_w - margin - 42, margin + 64)
-        c.drawString(text_x, margin + 38, f"Page {page['page_number']}")
+        c.line(text_x, footer_y + 0.34 * inch, page_w - outer_x - 0.42 * inch, footer_y + 0.34 * inch)
+        c.drawString(text_x, footer_y, f"Page {page['page_number']} of {len(pages)}")
 
         next_dest = f"page_{idx + 2}" if idx + 1 < len(pages) else "page_1"
         prev_dest = f"page_{idx}" if idx > 0 else f"page_{len(pages)}"
-        draw_button(c, page_w - margin - 128, margin + 28, 104, 26, "Turn page ->", next_dest)
+        draw_button(c, page_w - outer_x - 128, footer_y - 4, 104, 26, "Turn page ->", next_dest)
         if len(pages) > 1:
-            draw_button(c, page_w - margin - 238, margin + 28, 92, 26, "<- Back", prev_dest)
+            draw_button(c, page_w - outer_x - 238, footer_y - 4, 92, 26, "<- Back", prev_dest)
 
         c.showPage()
 
