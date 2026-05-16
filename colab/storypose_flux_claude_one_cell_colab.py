@@ -527,43 +527,57 @@ def save_flipbook_html(title: str, pages: list[dict[str, Any]], subtitle: str = 
         page_blocks.append(
             f"""
             <article class="spread" id="{page_id}">
-              <div class="image-panel">
-                <img src="{image_data_uri(page["image_path"])}" alt="Story illustration page {page["page_number"]}">
-                <div class="chapter-pill">Chapter One</div>
-                <div class="dot teal"></div>
-              </div>
-              <section class="text-panel">
-                <div>
-                  <p class="eyebrow">Once upon a time</p>
-                  <h1>{html.escape(title)}</h1>
-                  {f'<p class="subtitle">{html.escape(subtitle)}</p>' if subtitle else ''}
-                  <div class="story-copy">
-                    <p class="drop"><span>{drop}</span>{first_tail}</p>
-                    {''.join(f'<p>{html.escape(p)}</p>' for p in rest)}
+              <header class="top-row">
+                <div class="brand"><span class="book-icon">□</span> STORYPOSE · READ ALOUD</div>
+                <div class="counter">{idx + 1:02d} / {len(pages):02d}</div>
+              </header>
+              <div class="book-wrap">
+                <div class="dot pink"></div>
+                <div class="dot aqua"></div>
+                <div class="dot sun"></div>
+                <div class="book-card">
+                  <div class="image-panel">
+                    <img src="{image_data_uri(page["image_path"])}" alt="Story illustration page {page["page_number"]}">
+                    <div class="chapter-pill">Chapter One · {html.escape(title[:28])}</div>
                   </div>
+                  <section class="text-panel">
+                    <div>
+                      <p class="eyebrow">A Storybook Classic</p>
+                      <h1>{html.escape(title)}</h1>
+                      {f'<p class="subtitle">{html.escape(subtitle)}</p>' if subtitle else ''}
+                      <div class="story-copy">
+                        <p class="drop"><span>{drop}</span>{first_tail}</p>
+                        {''.join(f'<p>{html.escape(p)}</p>' for p in rest)}
+                      </div>
+                    </div>
+                    <footer>
+                      <span>Page {page["page_number"]} of {len(pages)}</span>
+                      <nav>
+                        <a class="ghost-button" href="#{prev_id}">Back</a>
+                        <a class="turn-button" href="#{next_id}">Turn the page</a>
+                      </nav>
+                    </footer>
+                  </section>
                 </div>
-                <footer>
-                  <span>Page {page["page_number"]}</span>
-                  <nav>
-                    <a class="ghost-button" href="#{prev_id}">← Back</a>
-                    <a class="turn-button" href="#{next_id}">Turn the page →</a>
-                  </nav>
-                </footer>
-              </section>
-              <div class="dot pink"></div>
+              </div>
+              <div class="pager-dots">
+                {''.join(f'<a href="#page-{i + 1}" class="pager-dot {("active" if i == idx else "")}" aria-label="Page {i + 1}"></a>' for i in range(len(pages)))}
+              </div>
             </article>
             """
         )
 
     css = """
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&family=Inter:wght@400;600;700;800;900&display=swap');
     :root {
-      --ink: #3a120f;
-      --muted: #5f6f76;
+      --ink: #3b1711;
+      --muted: #756c64;
       --sun: #ffd94d;
-      --accent: #d88659;
-      --paper: #fffdf8;
+      --accent: #ce7a55;
+      --paper: #fffdf6;
       --aqua: #56c7c8;
       --pink: #f06e93;
+      --soft: rgba(65, 36, 22, .14);
     }
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
@@ -571,37 +585,54 @@ def save_flipbook_html(title: str, pages: list[dict[str, Any]], subtitle: str = 
       margin: 0;
       min-height: 100vh;
       color: var(--ink);
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background:
-        radial-gradient(circle at 16% 12%, rgba(255, 229, 102, .52), transparent 34%),
-        radial-gradient(circle at 88% 88%, rgba(69, 205, 214, .42), transparent 31%),
-        linear-gradient(135deg, #ffe79f 0%, #ffd4cf 45%, #c9f5f0 100%);
+        radial-gradient(circle at 10% 14%, rgba(255, 222, 116, .62), transparent 32%),
+        radial-gradient(circle at 90% 84%, rgba(87, 211, 214, .45), transparent 30%),
+        linear-gradient(135deg, #ffe28f 0%, #ffd0c6 47%, #c9f4ef 100%);
     }
     main {
       min-height: 100vh;
       width: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 48px;
+      display: block;
+      padding: 48px 32px;
     }
     .spread {
       display: none;
       position: relative;
       width: min(1150px, 100%);
-      min-height: 650px;
-      grid-template-columns: 1.05fr 1fr;
-      background: var(--paper);
-      border-radius: 26px;
-      overflow: hidden;
-      box-shadow: 0 30px 90px rgba(75, 42, 27, .16);
+      margin: 0 auto;
     }
-    .spread:target { display: grid; }
-    .spread:first-child { display: grid; }
+    .spread:target { display: block; }
+    .spread:first-child { display: block; }
     main:has(.spread:target) .spread:first-child { display: none; }
+    .top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 0 6px 28px;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .36em;
+    }
+    .brand { text-transform: uppercase; }
+    .book-icon { display: inline-block; margin-right: 8px; color: var(--accent); }
+    .counter { color: #4f4038; letter-spacing: .18em; }
+    .book-wrap { position: relative; }
+    .book-card {
+      display: grid;
+      grid-template-columns: 1.05fr 1fr;
+      min-height: 640px;
+      background: var(--paper);
+      border: 1px solid rgba(85, 55, 35, .12);
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow: 0 34px 90px rgba(83, 46, 24, .14);
+    }
     .image-panel {
       position: relative;
-      min-height: 650px;
+      min-height: 640px;
       overflow: hidden;
       background: #f7ead3;
     }
@@ -628,22 +659,23 @@ def save_flipbook_html(title: str, pages: list[dict[str, Any]], subtitle: str = 
       flex-direction: column;
       justify-content: space-between;
       gap: 36px;
+      min-height: 640px;
       padding: 56px 56px 42px;
     }
     .eyebrow {
       margin: 0 0 20px;
       color: var(--accent);
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 900;
       letter-spacing: .32em;
       text-transform: uppercase;
     }
     h1 {
       margin: 0 0 18px;
-      font-family: Georgia, Cambria, "Times New Roman", serif;
-      font-size: clamp(42px, 5vw, 64px);
+      font-family: Fraunces, Georgia, Cambria, "Times New Roman", serif;
+      font-size: clamp(34px, 4.1vw, 56px);
       line-height: 1.06;
-      font-weight: 800;
+      font-weight: 900;
       letter-spacing: 0;
     }
     .subtitle {
@@ -654,22 +686,22 @@ def save_flipbook_html(title: str, pages: list[dict[str, Any]], subtitle: str = 
     }
     .story-copy {
       max-width: 540px;
-      color: #253238;
+      color: rgba(59, 23, 17, .92);
       font-size: 18px;
-      line-height: 1.75;
+      line-height: 1.8;
     }
     .story-copy p { margin: 0 0 22px; }
     .story-copy .drop span {
       float: left;
       padding: 8px 9px 0 0;
-      color: var(--pink);
-      font-family: Georgia, Cambria, "Times New Roman", serif;
-      font-size: 74px;
-      line-height: .75;
-      font-weight: 800;
+      color: var(--ink);
+      font-family: Fraunces, Georgia, Cambria, "Times New Roman", serif;
+      font-size: 66px;
+      line-height: .76;
+      font-weight: 900;
     }
     footer {
-      border-top: 1px solid rgba(45, 33, 24, .15);
+      border-top: 1px solid var(--soft);
       padding-top: 24px;
       display: flex;
       align-items: center;
@@ -683,7 +715,7 @@ def save_flipbook_html(title: str, pages: list[dict[str, Any]], subtitle: str = 
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 42px;
+      min-height: 44px;
       padding: 0 24px;
       border-radius: 999px;
       text-decoration: none;
@@ -700,11 +732,28 @@ def save_flipbook_html(title: str, pages: list[dict[str, Any]], subtitle: str = 
       border-radius: 999px;
       z-index: 3;
     }
-    .dot.teal { right: -17px; bottom: 76px; background: var(--aqua); }
-    .dot.pink { right: 32px; top: -16px; background: var(--pink); }
+    .dot.aqua { left: -14px; top: 96px; background: var(--aqua); }
+    .dot.pink { right: 28px; top: -16px; background: var(--pink); }
+    .dot.sun { left: 33%; bottom: -14px; width: 24px; height: 24px; background: var(--sun); }
+    .pager-dots {
+      margin-top: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .pager-dot {
+      display: block;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(59, 23, 17, .2);
+      transition: width .18s ease, background .18s ease;
+    }
+    .pager-dot.active { width: 32px; background: var(--accent); }
     @media (max-width: 820px) {
-      main { padding: 22px; align-items: flex-start; }
-      .spread { grid-template-columns: 1fr; min-height: auto; }
+      main { padding: 22px; }
+      .book-card { grid-template-columns: 1fr; min-height: auto; }
       .image-panel { min-height: 380px; }
       .text-panel { padding: 36px 28px 30px; }
       h1 { font-size: 40px; }
