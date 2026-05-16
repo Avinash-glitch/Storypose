@@ -88,6 +88,123 @@ HTML_ROOT = OUTPUT_ROOT / "html"
 PDF_ROOT = OUTPUT_ROOT / "pdf"
 
 
+PRESET_CHARACTERS: dict[str, dict[str, Any]] = {
+    "fleece": {
+        "character_id": "fleece",
+        "name": "Fleece",
+        "role": "cloud shepherd",
+        "species": "small white sheep",
+        "age_feel": "young, gentle, responsible",
+        "visual_identity": {
+            "body": "small white sheep with fluffy cloud-like wool",
+            "face": "round soft face, pink inner ears, gentle dark eyes",
+            "outfit": "tiny brown leather boots on all four hooves",
+            "signature_object": "slender shepherd crook made of glowing moonlight",
+            "color_palette": "soft white, silver-blue moonlight, warm brown boots",
+        },
+        "personality": "careful, nurturing, brave, quietly determined",
+        "speech_style": "soft, simple, comforting",
+        "do_not_change": [
+            "do not make Fleece human",
+            "keep the brown boots",
+            "keep the glowing moonlight crook",
+            "keep the wool fluffy and cloud-like",
+        ],
+    },
+    "zara_starling": {
+        "character_id": "zara_starling",
+        "name": "Zara Starling",
+        "role": "young rooftop superhero",
+        "species": "human child",
+        "age_feel": "8 years old, confident, kind",
+        "visual_identity": {
+            "body": "small athletic child with warm brown skin",
+            "face": "round expressive face, bright determined smile",
+            "hair": "black curly hair tied into two puff buns",
+            "outfit": "teal superhero suit with yellow star badge, short coral cape, white gloves, yellow boots",
+            "signature_object": "glowing star-shaped wrist communicator",
+            "color_palette": "teal, coral, yellow, white",
+        },
+        "personality": "brave, practical, encouraging, protective",
+        "speech_style": "clear, upbeat, reassuring",
+        "do_not_change": [
+            "keep two puff buns",
+            "keep teal suit and coral cape",
+            "keep yellow star badge",
+            "do not make her older",
+        ],
+    },
+    "milo_moonbeam": {
+        "character_id": "milo_moonbeam",
+        "name": "Milo Moonbeam",
+        "role": "inventor superhero",
+        "species": "human child",
+        "age_feel": "8 years old, clever, slightly clumsy",
+        "visual_identity": {
+            "body": "small slim child with light brown skin",
+            "face": "soft round face with curious expression",
+            "hair": "messy dark brown hair",
+            "outfit": "navy blue hero suit, silver cape, round goggles on forehead, orange utility belt, silver boots",
+            "signature_object": "tiny backpack full of moon-powered gadgets",
+            "color_palette": "navy, silver, orange, moon-white",
+        },
+        "personality": "inventive, funny, nervous but brave, loyal",
+        "speech_style": "quick, curious, sometimes jokes when worried",
+        "do_not_change": [
+            "keep goggles on forehead",
+            "keep silver cape",
+            "keep orange utility belt",
+            "keep gadget backpack",
+        ],
+    },
+    "captain_glow": {
+        "character_id": "captain_glow",
+        "name": "Captain Glow",
+        "role": "gentle robot who is afraid of the dark",
+        "species": "friendly robot",
+        "age_feel": "childlike, gentle, learning",
+        "visual_identity": {
+            "body": "large rounded robot with soft toy-like proportions",
+            "face": "simple glowing screen face with kind expression",
+            "outfit": "no clothing, smooth metal body with rounded panels",
+            "signature_object": "warm star-shaped lantern fixed to chest",
+            "color_palette": "soft gray metal, warm golden light, pale blue highlights",
+        },
+        "personality": "shy, helpful, easily worried, very gentle",
+        "speech_style": "short, literal, polite sentences",
+        "do_not_change": [
+            "keep rounded friendly robot shape",
+            "keep star lantern on chest",
+            "do not make scary or sharp",
+            "do not add weapons",
+        ],
+    },
+    "nora_nettle": {
+        "character_id": "nora_nettle",
+        "name": "Nora Nettle",
+        "role": "forest mapmaker",
+        "species": "human child",
+        "age_feel": "9 years old, observant, thoughtful",
+        "visual_identity": {
+            "body": "small child with tan skin and sturdy posture",
+            "face": "freckled cheeks, focused gentle expression",
+            "hair": "auburn wavy hair in a short braid",
+            "outfit": "green raincoat, cream scarf, brown shorts over warm leggings, red boots",
+            "signature_object": "rolled magical map tied with blue string",
+            "color_palette": "forest green, cream, brown, red boots, soft blue map glow",
+        },
+        "personality": "patient, curious, careful, quietly adventurous",
+        "speech_style": "thoughtful, precise, asks good questions",
+        "do_not_change": [
+            "keep green raincoat",
+            "keep red boots",
+            "keep auburn braid",
+            "keep magical map",
+        ],
+    },
+}
+
+
 SYSTEM_PROMPT = """
 You are StoryPose: a professional children's picture-book author and visual art director.
 Return only valid JSON. Do not wrap JSON in markdown.
@@ -104,10 +221,53 @@ Images must contain no written words, captions, speech bubbles, logos, or waterm
 """.strip()
 
 
-def user_prompt(transcript: str, max_pages: int) -> str:
+def format_character_library(characters: list[dict[str, Any]]) -> str:
+    if not characters:
+        return ""
+    return json.dumps(characters, indent=2, ensure_ascii=False)
+
+
+def select_preset_characters() -> list[dict[str, Any]]:
+    print("\nOptional StoryPose character library:")
+    for character_id, character in PRESET_CHARACTERS.items():
+        print(f"- {character_id}: {character['name']} ({character['role']})")
+    raw = input(
+        "Use preset characters? Enter comma-separated IDs, 'all', or press Enter for story-generated characters: "
+    ).strip()
+    if not raw:
+        return []
+    if raw.lower() == "all":
+        return list(PRESET_CHARACTERS.values())
+    selected = []
+    for part in raw.split(","):
+        key = part.strip().lower()
+        if key in PRESET_CHARACTERS:
+            selected.append(PRESET_CHARACTERS[key])
+        elif key:
+            print(f"Skipping unknown character id: {key}")
+    return selected
+
+
+def user_prompt(transcript: str, max_pages: int, selected_characters: list[dict[str, Any]] | None = None) -> str:
+    selected_characters = selected_characters or []
+    character_instructions = ""
+    if selected_characters:
+        character_instructions = f"""
+
+Selected reusable StoryPose characters:
+{format_character_library(selected_characters)}
+
+Character rules:
+- Use these selected characters as the recurring named main characters where they fit the child's story.
+- Preserve each selected character's visual_identity and do_not_change rules exactly.
+- You may add minor background characters only if the story needs them.
+- Include selected characters in the returned "characters" array and in the character_bible.
+""".rstrip()
+
     return f"""
 Child transcript:
 {transcript}
+{character_instructions}
 
 Create a picture-book plan.
 
@@ -131,6 +291,16 @@ Return JSON exactly:
 {{
   "title": "string",
   "subtitle": "string",
+  "characters": [
+    {{
+      "character_id": "string",
+      "name": "string",
+      "role": "string",
+      "visual_identity": "short locked visual description",
+      "personality": "short behavior description",
+      "do_not_change": ["string"]
+    }}
+  ],
   "character_bible": "string",
   "style_bible": "string",
   "pages": [
@@ -297,11 +467,17 @@ def extract_json(text: str) -> dict[str, Any]:
     return json.loads(text)
 
 
-def generate_story_pages_with_claude(transcript: str, max_pages: int = MAX_PAGES, model: str = CLAUDE_MODEL) -> tuple[dict[str, Any], TokenCost]:
+def generate_story_pages_with_claude(
+    transcript: str,
+    max_pages: int = MAX_PAGES,
+    model: str = CLAUDE_MODEL,
+    selected_characters: list[dict[str, Any]] | None = None,
+) -> tuple[dict[str, Any], TokenCost]:
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is missing, so Claude cannot create pages.")
 
-    prompt = user_prompt(transcript, max_pages=max_pages)
+    selected_characters = selected_characters or []
+    prompt = user_prompt(transcript, max_pages=max_pages, selected_characters=selected_characters)
     input_tokens = count_claude_tokens(model, SYSTEM_PROMPT, prompt)
     client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
@@ -319,6 +495,7 @@ def generate_story_pages_with_claude(transcript: str, max_pages: int = MAX_PAGES
             data = extract_json(text)
             if not data.get("title") or not isinstance(data.get("pages"), list):
                 raise ValueError("Claude JSON missing title/pages.")
+            data.setdefault("characters", selected_characters)
             for page in data["pages"]:
                 if isinstance(page, dict):
                     page.setdefault("scene_action", page.get("image_description", ""))
@@ -426,6 +603,7 @@ def enrich_image_prompt(page: dict[str, Any], story: dict[str, Any], visual_memo
     emotion = compact_prompt_text(page.get("emotion", ""), max_words=12)
     image_description = compact_prompt_text(page["image_description"], max_words=58)
     character_lock = compact_prompt_text(story.get("character_bible", ""), max_words=55)
+    selected_character_lock = compact_prompt_text(format_character_library(story.get("characters", [])), max_words=55)
     style_lock = compact_prompt_text(story.get("style_bible", ""), max_words=35)
     memory_lock = compact_prompt_text(visual_memory, max_words=45)
 
@@ -434,6 +612,7 @@ def enrich_image_prompt(page: dict[str, Any], story: dict[str, Any], visual_memo
         f"Setting: {setting}" if setting else "",
         f"Emotion: {emotion}" if emotion else "",
         f"Visual scene: {image_description}",
+        f"Selected character locks: {selected_character_lock}" if selected_character_lock else "",
         f"Character continuity: {character_lock}" if character_lock else "",
         f"Approved page 1 visual memory: {memory_lock}" if memory_lock else "",
         f"Style: {style_lock}" if style_lock else "",
@@ -472,6 +651,11 @@ def generate_images(story: dict[str, Any], pages: list[dict[str, Any]]) -> list[
     slug = safe_slug(story["title"])
     complete_pages: list[dict[str, Any]] = []
     visual_memory = ""
+    if story.get("characters"):
+        (OUTPUT_ROOT / f"{slug}-characters.json").write_text(
+            json.dumps(story["characters"], indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
 
     for page in pages:
         page_number = int(page["page_number"])
@@ -978,9 +1162,18 @@ def save_linked_pdf(title: str, pages: list[dict[str, Any]], subtitle: str = "")
     return str(path)
 
 
-def run_storypose_from_text(transcript: str, test_pages: int = TEST_PAGES) -> dict[str, Any]:
+def run_storypose_from_text(
+    transcript: str,
+    test_pages: int = TEST_PAGES,
+    selected_characters: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     ensure_dirs()
-    story, cost = generate_story_pages_with_claude(transcript, max_pages=MAX_PAGES, model=CLAUDE_MODEL)
+    story, cost = generate_story_pages_with_claude(
+        transcript,
+        max_pages=MAX_PAGES,
+        model=CLAUDE_MODEL,
+        selected_characters=selected_characters,
+    )
     pages = story["pages"][:test_pages] if test_pages else story["pages"]
     pages = generate_images(story, pages)
     html_path = save_flipbook_html(story["title"], pages, story.get("subtitle", ""))
@@ -988,6 +1181,7 @@ def run_storypose_from_text(transcript: str, test_pages: int = TEST_PAGES) -> di
     return {
         "title": story["title"],
         "subtitle": story.get("subtitle", ""),
+        "characters": story.get("characters", selected_characters or []),
         "pages": pages,
         "token_cost": cost.__dict__,
         "html_path": html_path,
@@ -995,9 +1189,16 @@ def run_storypose_from_text(transcript: str, test_pages: int = TEST_PAGES) -> di
     }
 
 
-def run_storypose_from_audio(test_pages: int = TEST_PAGES) -> dict[str, Any]:
+def run_storypose_from_audio(
+    test_pages: int = TEST_PAGES,
+    selected_characters: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     transcript = upload_and_transcribe_story()
-    return run_storypose_from_text(transcript, test_pages=test_pages)
+    return run_storypose_from_text(
+        transcript,
+        test_pages=test_pages,
+        selected_characters=selected_characters,
+    )
 
 
 # -------------------------
@@ -1011,21 +1212,28 @@ print("CUDA:", torch.cuda.is_available())
 print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "None")
 print("Claude model test:", test_claude_model(CLAUDE_MODEL))
 
+selected_characters = select_preset_characters()
+
 mode = input("Type 'audio' to upload spoken story, or press Enter to paste/type a transcript: ").strip().lower()
 if mode == "audio":
-    result = run_storypose_from_audio(test_pages=TEST_PAGES)
+    result = run_storypose_from_audio(test_pages=TEST_PAGES, selected_characters=selected_characters)
 else:
     transcript = input("Paste/type the child's story transcript: ").strip()
     if not transcript:
         transcript = "A little turtle is afraid to cross the pond, but he helps a lost duckling find her way home."
         print("Using demo transcript:", transcript)
-    result = run_storypose_from_text(transcript, test_pages=TEST_PAGES)
+    result = run_storypose_from_text(
+        transcript,
+        test_pages=TEST_PAGES,
+        selected_characters=selected_characters,
+    )
 
 print("\nDONE")
 print("Title:", result["title"])
 print("Estimated Claude token/cost:", result["token_cost"])
 print("HTML:", result["html_path"])
 print("PDF:", result["pdf_path"])
+print("Characters:", [c.get("name") for c in result.get("characters", [])])
 for page in result["pages"]:
     print(f"Page {page['page_number']} image: {page['image_path']}")
 
