@@ -248,6 +248,79 @@ def select_preset_characters() -> list[dict[str, Any]]:
     return selected
 
 
+def save_character_library() -> dict[str, str]:
+    """Save preset characters as JSON and a simple browser-viewable HTML page."""
+    ensure_dirs()
+    json_path = OUTPUT_ROOT / "storypose-character-library.json"
+    html_path = HTML_ROOT / "storypose-character-library.html"
+    characters = list(PRESET_CHARACTERS.values())
+    json_path.write_text(json.dumps(characters, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    cards = []
+    for character in characters:
+        identity = character.get("visual_identity", {})
+        cards.append(
+            f"""
+            <article class="card">
+              <div class="badge">{html.escape(character["character_id"])}</div>
+              <h2>{html.escape(character["name"])}</h2>
+              <p class="role">{html.escape(character["role"])} · {html.escape(character["species"])}</p>
+              <dl>
+                <dt>Age Feel</dt><dd>{html.escape(character["age_feel"])}</dd>
+                <dt>Visual Identity</dt><dd>{html.escape("; ".join(f"{k}: {v}" for k, v in identity.items()))}</dd>
+                <dt>Personality</dt><dd>{html.escape(character["personality"])}</dd>
+                <dt>Speech</dt><dd>{html.escape(character["speech_style"])}</dd>
+                <dt>Do Not Change</dt><dd>{html.escape("; ".join(character.get("do_not_change", [])))}</dd>
+              </dl>
+            </article>
+            """
+        )
+
+    html_doc = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StoryPose Character Library</title>
+  <style>
+    body {{
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #321811;
+      background: linear-gradient(135deg, #ffe28f, #ffd0c6 45%, #c9f4ef);
+    }}
+    main {{ max-width: 1120px; margin: 0 auto; padding: 48px 24px; }}
+    h1 {{ font-family: Georgia, serif; font-size: clamp(38px, 6vw, 64px); margin: 0 0 10px; }}
+    .intro {{ color: #6b5a4f; margin: 0 0 28px; font-size: 18px; }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }}
+    .card {{ background: #fffdf6; border: 1px solid rgba(75, 42, 24, .12); border-radius: 22px; padding: 24px; box-shadow: 0 22px 50px rgba(83, 46, 24, .12); }}
+    .badge {{ display: inline-flex; background: #ffd94d; border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 900; margin-bottom: 16px; }}
+    h2 {{ margin: 0; font-family: Georgia, serif; font-size: 28px; }}
+    .role {{ margin: 8px 0 18px; color: #8a6c5d; font-weight: 700; }}
+    dl {{ margin: 0; }}
+    dt {{ margin-top: 14px; font-size: 12px; text-transform: uppercase; letter-spacing: .16em; color: #ce7a55; font-weight: 900; }}
+    dd {{ margin: 6px 0 0; line-height: 1.55; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>StoryPose Character Library</h1>
+    <p class="intro">Reusable child-safe character bibles for storybook generation.</p>
+    <section class="grid">
+      {''.join(cards)}
+    </section>
+  </main>
+</body>
+</html>
+"""
+    html_path.write_text(html_doc, encoding="utf-8")
+    return {"json_path": str(json_path), "html_path": str(html_path)}
+
+
+def print_character_library() -> None:
+    print(json.dumps(list(PRESET_CHARACTERS.values()), indent=2, ensure_ascii=False))
+
+
 def user_prompt(transcript: str, max_pages: int, selected_characters: list[dict[str, Any]] | None = None) -> str:
     selected_characters = selected_characters or []
     character_instructions = ""
@@ -1212,29 +1285,36 @@ print("CUDA:", torch.cuda.is_available())
 print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "None")
 print("Claude model test:", test_claude_model(CLAUDE_MODEL))
 
-selected_characters = select_preset_characters()
-
-mode = input("Type 'audio' to upload spoken story, or press Enter to paste/type a transcript: ").strip().lower()
-if mode == "audio":
-    result = run_storypose_from_audio(test_pages=TEST_PAGES, selected_characters=selected_characters)
+if input("Save/print character library only? Type 'chars' or press Enter to continue story generation: ").strip().lower() == "chars":
+    library_paths = save_character_library()
+    print_character_library()
+    print("Character library JSON:", library_paths["json_path"])
+    print("Character library HTML:", library_paths["html_path"])
+    result = {"character_library": library_paths}
 else:
-    transcript = input("Paste/type the child's story transcript: ").strip()
-    if not transcript:
-        transcript = "A little turtle is afraid to cross the pond, but he helps a lost duckling find her way home."
-        print("Using demo transcript:", transcript)
-    result = run_storypose_from_text(
-        transcript,
-        test_pages=TEST_PAGES,
-        selected_characters=selected_characters,
-    )
+    selected_characters = select_preset_characters()
 
-print("\nDONE")
-print("Title:", result["title"])
-print("Estimated Claude token/cost:", result["token_cost"])
-print("HTML:", result["html_path"])
-print("PDF:", result["pdf_path"])
-print("Characters:", [c.get("name") for c in result.get("characters", [])])
-for page in result["pages"]:
-    print(f"Page {page['page_number']} image: {page['image_path']}")
+    mode = input("Type 'audio' to upload spoken story, or press Enter to paste/type a transcript: ").strip().lower()
+    if mode == "audio":
+        result = run_storypose_from_audio(test_pages=TEST_PAGES, selected_characters=selected_characters)
+    else:
+        transcript = input("Paste/type the child's story transcript: ").strip()
+        if not transcript:
+            transcript = "A little turtle is afraid to cross the pond, but he helps a lost duckling find her way home."
+            print("Using demo transcript:", transcript)
+        result = run_storypose_from_text(
+            transcript,
+            test_pages=TEST_PAGES,
+            selected_characters=selected_characters,
+        )
+
+    print("\nDONE")
+    print("Title:", result["title"])
+    print("Estimated Claude token/cost:", result["token_cost"])
+    print("HTML:", result["html_path"])
+    print("PDF:", result["pdf_path"])
+    print("Characters:", [c.get("name") for c in result.get("characters", [])])
+    for page in result["pages"]:
+        print(f"Page {page['page_number']} image: {page['image_path']}")
 
 result
