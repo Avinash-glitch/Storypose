@@ -770,6 +770,10 @@ def save_linked_pdf(title: str, pages: list[dict[str, Any]], subtitle: str = "")
         scale = max(left_w / img_w, panel_h / img_h)
         draw_w = img_w * scale
         draw_h = img_h * scale
+        c.saveState()
+        clip = c.beginPath()
+        clip.rect(left_x, panel_y, left_w, panel_h)
+        c.clipPath(clip, stroke=0, fill=0)
         c.drawImage(
             img,
             left_x + (left_w - draw_w) / 2,
@@ -779,6 +783,11 @@ def save_linked_pdf(title: str, pages: list[dict[str, Any]], subtitle: str = "")
             preserveAspectRatio=True,
             mask="auto",
         )
+        c.restoreState()
+
+        # Keep the text page clean even if a PDF renderer handles clipping loosely.
+        c.setFillColor(colors.HexColor("#fffdf8"))
+        c.rect(right_x, panel_y, right_w, panel_h, fill=1, stroke=0)
 
         c.setFillColor(colors.HexColor("#ffd94d"))
         c.roundRect(left_x + 18, page_h - margin - 34, 96, 22, 11, fill=1, stroke=0)
