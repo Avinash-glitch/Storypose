@@ -323,8 +323,109 @@ def print_character_library() -> None:
     print(json.dumps(list(PRESET_CHARACTERS.values()), indent=2, ensure_ascii=False))
 
 
-def user_prompt(transcript: str, max_pages: int, selected_characters: list[dict[str, Any]] | None = None) -> str:
+class StorybookStyle:
+    style_id = "classic_picture_book"
+    name = "Classic Picture Book"
+    story_direction = "gentle classic children's picture-book narration with clear page turns"
+    image_direction = (
+        "soft watercolor and gouache, warm paper texture, expressive body language, "
+        "gentle cinematic composition, clear story action, no text"
+    )
+    clip_style = "soft watercolor storybook, warm paper texture, no text"
+
+    def as_dict(self) -> dict[str, str]:
+        return {
+            "style_id": self.style_id,
+            "name": self.name,
+            "story_direction": self.story_direction,
+            "image_direction": self.image_direction,
+            "clip_style": self.clip_style,
+        }
+
+    def prompt_block(self) -> str:
+        return (
+            f"Style preset: {self.name}\n"
+            f"Story direction: {self.story_direction}\n"
+            f"Image direction: {self.image_direction}"
+        )
+
+
+class ClassicPictureBookStyle(StorybookStyle):
+    style_id = "classic_picture_book"
+    name = "Classic Picture Book"
+    story_direction = "gentle classic children's picture-book narration, simple emotional beats, lyrical but clear"
+    image_direction = (
+        "soft watercolor and gouache, warm paper texture, natural storybook lighting, "
+        "expressive poses, cozy detail, classic printed children's book feel, no text"
+    )
+    clip_style = "soft watercolor classic picture book, warm paper texture, no text"
+
+
+class ModernAnimatedStorybookStyle(StorybookStyle):
+    style_id = "modern_animated"
+    name = "Modern Animated Storybook"
+    story_direction = "bright cinematic children's adventure with clear dialogue beats and energetic page turns"
+    image_direction = (
+        "polished modern animated feature look, rounded character shapes, vibrant but warm colors, "
+        "cinematic lighting, dynamic action, expressive faces and gestures, no text"
+    )
+    clip_style = "modern animated storybook, vibrant cinematic action, no text"
+
+
+class VintageFableStyle(StorybookStyle):
+    style_id = "vintage_fable"
+    name = "Vintage Fable"
+    story_direction = "timeless fable narration with concise moral clarity and old-world story rhythm"
+    image_direction = (
+        "vintage ink and watercolor, muted earthy palette, paper grain, simple elegant compositions, "
+        "storybook engraving influence, expressive but restrained action, no text"
+    )
+    clip_style = "vintage fable ink watercolor, muted paper texture, no text"
+
+
+class ComicStorybookStyle(StorybookStyle):
+    style_id = "comic_storybook"
+    name = "Comic Storybook"
+    story_direction = "fast-moving children’s adventure with punchy dialogue moments and clear action beats"
+    image_direction = (
+        "comic-inspired children's storybook art, dynamic framing, bold silhouettes, clean colorful shapes, "
+        "expressive action poses, panel-like energy but no text and no speech bubbles"
+    )
+    clip_style = "comic storybook action, bold colorful dynamic, no text"
+
+
+STORY_STYLES: dict[str, StorybookStyle] = {
+    style.style_id: style
+    for style in [
+        ClassicPictureBookStyle(),
+        ModernAnimatedStorybookStyle(),
+        VintageFableStyle(),
+        ComicStorybookStyle(),
+    ]
+}
+
+
+def select_story_style() -> StorybookStyle:
+    print("\nStory styles:")
+    for style_id, style in STORY_STYLES.items():
+        print(f"- {style_id}: {style.name}")
+    raw = input("Choose style ID or press Enter for classic_picture_book: ").strip().lower()
+    if not raw:
+        return STORY_STYLES["classic_picture_book"]
+    if raw not in STORY_STYLES:
+        print(f"Unknown style '{raw}', using classic_picture_book.")
+        return STORY_STYLES["classic_picture_book"]
+    return STORY_STYLES[raw]
+
+
+def user_prompt(
+    transcript: str,
+    max_pages: int,
+    selected_characters: list[dict[str, Any]] | None = None,
+    story_style: StorybookStyle | None = None,
+) -> str:
     selected_characters = selected_characters or []
+    story_style = story_style or STORY_STYLES["classic_picture_book"]
     character_instructions = ""
     if selected_characters:
         character_instructions = f"""
@@ -344,6 +445,9 @@ Child transcript:
 {transcript}
 {character_instructions}
 
+Selected storybook style:
+{story_style.prompt_block()}
+
 Create a picture-book plan.
 
 Requirements:
@@ -359,13 +463,14 @@ Requirements:
 - If characters are speaking, show body language, facial expressions, and reactions. Do not use speech bubbles or text.
 - The image must make sense without reading the story_text.
 - Use the page design tone of a premium printed storybook: warm, soft, whimsical, emotionally clear.
-- The image style should be consistent across pages.
+- The image style should be consistent across pages and must follow the selected storybook style.
 - Do not include text inside images.
 
 Return JSON exactly:
 {{
   "title": "string",
   "subtitle": "string",
+  "style_preset": "{story_style.style_id}",
   "characters": [
     {{
       "character_id": "string",
@@ -420,6 +525,7 @@ STORYBOOK_PLAN_TOOL = {
         "properties": {
             "title": {"type": "string"},
             "subtitle": {"type": "string"},
+            "style_preset": {"type": "string"},
             "characters": {
                 "type": "array",
                 "items": {
@@ -617,10 +723,16 @@ def extract_tool_input(message: Any, tool_name: str) -> dict[str, Any] | None:
     return None
 
 
-def normalize_story_data(data: dict[str, Any], selected_characters: list[dict[str, Any]]) -> dict[str, Any]:
+def normalize_story_data(
+    data: dict[str, Any],
+    selected_characters: list[dict[str, Any]],
+    story_style: StorybookStyle,
+) -> dict[str, Any]:
     if not data.get("title") or not isinstance(data.get("pages"), list):
         raise ValueError("Claude output missing title/pages.")
     data.setdefault("subtitle", "")
+    data.setdefault("style_preset", story_style.style_id)
+    data["_story_style"] = story_style.as_dict()
     data.setdefault("characters", selected_characters)
     data.setdefault("character_bible", "")
     data.setdefault("style_bible", "")
@@ -641,12 +753,19 @@ def generate_story_pages_with_claude(
     max_pages: int = MAX_PAGES,
     model: str = CLAUDE_MODEL,
     selected_characters: list[dict[str, Any]] | None = None,
+    story_style: StorybookStyle | None = None,
 ) -> tuple[dict[str, Any], TokenCost]:
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is missing, so Claude cannot create pages.")
 
     selected_characters = selected_characters or []
-    prompt = user_prompt(transcript, max_pages=max_pages, selected_characters=selected_characters)
+    story_style = story_style or STORY_STYLES["classic_picture_book"]
+    prompt = user_prompt(
+        transcript,
+        max_pages=max_pages,
+        selected_characters=selected_characters,
+        story_style=story_style,
+    )
     input_tokens = count_claude_tokens(model, SYSTEM_PROMPT, prompt)
     client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
@@ -666,7 +785,7 @@ def generate_story_pages_with_claude(
             if data is None:
                 text = "".join(block.text for block in message.content if getattr(block, "type", None) == "text")
                 data = extract_json(text)
-            data = normalize_story_data(data, selected_characters)
+            data = normalize_story_data(data, selected_characters, story_style)
             output_tokens = getattr(message.usage, "output_tokens", None)
             return data, estimate_cost(model, input_tokens, output_tokens)
         except Exception as exc:
@@ -771,6 +890,8 @@ def enrich_image_prompt(page: dict[str, Any], story: dict[str, Any], visual_memo
     character_lock = compact_prompt_text(story.get("character_bible", ""), max_words=55)
     selected_character_lock = compact_prompt_text(format_character_library(story.get("characters", [])), max_words=55)
     style_lock = compact_prompt_text(story.get("style_bible", ""), max_words=35)
+    style_preset = story.get("_story_style", {})
+    style_preset_lock = compact_prompt_text(style_preset.get("image_direction", ""), max_words=38)
     memory_lock = compact_prompt_text(visual_memory, max_words=45)
 
     parts = [
@@ -781,6 +902,7 @@ def enrich_image_prompt(page: dict[str, Any], story: dict[str, Any], visual_memo
         f"Selected character locks: {selected_character_lock}" if selected_character_lock else "",
         f"Character continuity: {character_lock}" if character_lock else "",
         f"Approved page 1 visual memory: {memory_lock}" if memory_lock else "",
+        f"Style preset: {style_preset_lock}" if style_preset_lock else "",
         f"Style: {style_lock}" if style_lock else "",
         (
             "Show the story action clearly, not a portrait. Premium children's storybook illustration, "
@@ -800,7 +922,10 @@ def build_flux_prompts(page: dict[str, Any], story: dict[str, Any], visual_memor
     action = compact_prompt_text(page.get("scene_action", ""), max_words=22)
     scene = compact_prompt_text(page["image_description"], max_words=28)
     memory_lock = compact_prompt_text(visual_memory, max_words=18)
-    style = "soft watercolor storybook, dreamy pastels, warm magical light, no text"
+    style = story.get("_story_style", {}).get(
+        "clip_style",
+        "soft watercolor storybook, dreamy pastels, warm magical light, no text",
+    )
     clip_parts = [
         action,
         scene,
@@ -1332,13 +1457,16 @@ def run_storypose_from_text(
     transcript: str,
     test_pages: int = TEST_PAGES,
     selected_characters: list[dict[str, Any]] | None = None,
+    story_style: StorybookStyle | None = None,
 ) -> dict[str, Any]:
     ensure_dirs()
+    story_style = story_style or STORY_STYLES["classic_picture_book"]
     story, cost = generate_story_pages_with_claude(
         transcript,
         max_pages=MAX_PAGES,
         model=CLAUDE_MODEL,
         selected_characters=selected_characters,
+        story_style=story_style,
     )
     pages = story["pages"][:test_pages] if test_pages else story["pages"]
     pages = generate_images(story, pages)
@@ -1347,6 +1475,7 @@ def run_storypose_from_text(
     return {
         "title": story["title"],
         "subtitle": story.get("subtitle", ""),
+        "style_preset": story.get("style_preset", story_style.style_id),
         "characters": story.get("characters", selected_characters or []),
         "pages": pages,
         "token_cost": cost.__dict__,
@@ -1358,12 +1487,14 @@ def run_storypose_from_text(
 def run_storypose_from_audio(
     test_pages: int = TEST_PAGES,
     selected_characters: list[dict[str, Any]] | None = None,
+    story_style: StorybookStyle | None = None,
 ) -> dict[str, Any]:
     transcript = upload_and_transcribe_story()
     return run_storypose_from_text(
         transcript,
         test_pages=test_pages,
         selected_characters=selected_characters,
+        story_style=story_style,
     )
 
 
@@ -1386,10 +1517,15 @@ if input("Save/print character library only? Type 'chars' or press Enter to cont
     result = {"character_library": library_paths}
 else:
     selected_characters = select_preset_characters()
+    selected_style = select_story_style()
 
     mode = input("Type 'audio' to upload spoken story, or press Enter to paste/type a transcript: ").strip().lower()
     if mode == "audio":
-        result = run_storypose_from_audio(test_pages=TEST_PAGES, selected_characters=selected_characters)
+        result = run_storypose_from_audio(
+            test_pages=TEST_PAGES,
+            selected_characters=selected_characters,
+            story_style=selected_style,
+        )
     else:
         transcript = input("Paste/type the child's story transcript: ").strip()
         if not transcript:
@@ -1399,10 +1535,12 @@ else:
             transcript,
             test_pages=TEST_PAGES,
             selected_characters=selected_characters,
+            story_style=selected_style,
         )
 
     print("\nDONE")
     print("Title:", result["title"])
+    print("Style:", result["style_preset"])
     print("Estimated Claude token/cost:", result["token_cost"])
     print("HTML:", result["html_path"])
     print("PDF:", result["pdf_path"])
